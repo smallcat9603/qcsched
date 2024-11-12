@@ -143,6 +143,17 @@ def app_layout():
                     ax.add_patch(rect)
                     ax.text(col+job.time/2, row+job.nnodes/2, f"{job.id}-{job.type}", size=10, horizontalalignment='center', verticalalignment='center')
             # st.write(sched_map[::-1]) # np.array index align with axis
+            df = pd.DataFrame([{
+                'Job ID': job.id,
+                'Status': job.status,
+                'Type': job.type,
+                'Nodes': job.nnodes,
+                'Elapsed Time': job.time,
+                'Start Time': job.start,
+                'Priority': job.priority,
+                } for job in st.session_state["jobs"]]
+            )
+            st.table(df)
         st.pyplot(fig) 
       
 
