@@ -1,6 +1,7 @@
 import streamlit as st
 import plotly.express as px
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
@@ -46,6 +47,16 @@ def make_dataframe(process,start,burst,finish,turn_around,wait):
     df=pd.DataFrame({"Process":process,'Arrival Time':start,"Burst Time":burst,'Completion Time':finish,'Turn Around Time':turn_around,'Waiting Time':wait}).sort_values(by ='Process')
     return df
 
+def map(sched_map, job):
+    if job.start + job.time < SCHED_MAP_TIME:
+        for col in range(max(job.start,0), SCHED_MAP_TIME-job.time): # x-axis
+            for row in range(HPC_NODES-job.nnodes): # y-axis
+                if np.all(sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0):
+                    sched_map[row:(row+job.nnodes), col:(col+job.time)] = 1
+                    job.status = "QUEUED"
+                    return (col, row)
+    job.status = "HOLD"
+    return None
 
 
 def app_layout():
@@ -108,9 +119,6 @@ def app_layout():
         ('FCFS', 'SJF', 'Priority'),
     )
 
-    if "sched_map" not in st.session_state:
-        st.session_state["sched_map"] = [[0] * HPC_NODES for _ in range(SCHED_MAP_TIME)]
-
     schedule = st.button(label='Schedule')
     if schedule:
         fig, ax = plt.subplots()
@@ -125,11 +133,16 @@ def app_layout():
         ax.spines['top'].set_color('none')
 
         if len(st.session_state["jobs"]) > 0:
+            sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME))
             for job in st.session_state["jobs"]:
-                rect = patches.Rectangle((job.start,0), job.time, job.nnodes, edgecolor="black", facecolor="orange")
-                ax.add_patch(rect)
-                ax.text(job.start+job.time/2, job.nnodes/2, f"{job.id}-{job.type}", size=20, horizontalalignment='center', verticalalignment='center')
-
+                ret = map(sched_map, job)
+                if ret:
+                    col = ret[0]
+                    row = ret[1]
+                    rect = patches.Rectangle((col,row), job.time, job.nnodes, edgecolor="black", facecolor="orange")
+                    ax.add_patch(rect)
+                    ax.text(col+job.time/2, row+job.nnodes/2, f"{job.id}-{job.type}", size=10, horizontalalignment='center', verticalalignment='center')
+            # st.write(sched_map[::-1]) # np.array index align with axis
         st.pyplot(fig) 
       
 
