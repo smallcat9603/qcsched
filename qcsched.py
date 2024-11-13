@@ -47,13 +47,13 @@ class Job:
 #     df=pd.DataFrame({"Process":process,'Arrival Time':start,"Burst Time":burst,'Completion Time':finish,'Turn Around Time':turn_around,'Waiting Time':wait}).sort_values(by ='Process')
 #     return df
 
-def map(sched_map, job):
+def map(job):
     if job.status == "ACCEPT":
         if job.start + job.time < SCHED_MAP_TIME:
             for col in range(max(job.start,0), SCHED_MAP_TIME-job.time): # x-axis
                 for row in range(HPC_NODES-job.nnodes): # y-axis
-                    if np.all(sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0):
-                        sched_map[row:(row+job.nnodes), col:(col+job.time)] = 1
+                    if np.all(st.session_state["sched_map"][row:(row+job.nnodes), col:(col+job.time)] == 0):
+                        st.session_state["sched_map"][row:(row+job.nnodes), col:(col+job.time)] = 1
                         job.status = "QUEUED"
                         return (col, row)
     if job.status != "QUEUED": 
@@ -61,9 +61,16 @@ def map(sched_map, job):
     return None
 
 
-def schedule(sched_map, jobs):
-    for job in jobs:
-        ret = map(sched_map, job)
+def schedule(algo):
+    st.session_state["jobs_scheduled"] = st.session_state["jobs_submitted"].copy() # separate individuals, but the same child attribute
+    if algo == 'FCFS':
+        st.session_state["jobs_scheduled"].sort(key=sort_key_fcfs)
+    elif algo == 'SJF':
+        st.session_state["jobs_scheduled"].sort(key=sort_key_sjf)
+    elif algo == 'Priority':
+        st.session_state["jobs_scheduled"].sort(key=sort_key_priority)
+    for job in st.session_state["jobs_scheduled"]:
+        ret = map(job)
         if ret:
             col = ret[0]
             row = ret[1]
@@ -152,15 +159,8 @@ def app_layout():
         'Select Scheduling Algorithm', ['FCFS', 'SJF', 'Priority'], default='FCFS'
     )
     if st.button(label='Schedule'):
-        st.session_state["jobs_scheduled"] = st.session_state["jobs_submitted"].copy() # separate individuals, but the same child attribute
-        if algo == 'FCFS':
-            st.session_state["jobs_scheduled"].sort(key=sort_key_fcfs)
-        elif algo == 'SJF':
-            st.session_state["jobs_scheduled"].sort(key=sort_key_sjf)
-        elif algo == 'Priority':
-            st.session_state["jobs_scheduled"].sort(key=sort_key_priority)
+        schedule(algo)
     if len(st.session_state["jobs_scheduled"]) > 0:   
-        schedule(st.session_state["sched_map"], st.session_state["jobs_scheduled"])
         show_jobs('jobs_scheduled')
         st.pyplot(st.session_state["fig"]) 
       
