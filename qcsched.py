@@ -161,8 +161,9 @@ def app_layout():
     if st.button(label='Schedule'):
         schedule(algo)
     if len(st.session_state["jobs_scheduled"]) > 0:   
-        show_jobs('jobs_scheduled')
+        # show_jobs('jobs_scheduled')
         st.pyplot(st.session_state["fig"]) 
+        st.rerun()
       
 if __name__=='__main__':
     app_layout()
