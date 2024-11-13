@@ -1,5 +1,4 @@
 import streamlit as st
-import plotly.express as px
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,7 +17,7 @@ class Job:
         self.priority = priority
         self.rstart = 0
         self.end = 0
-        self.status = ""
+        self.status = 'ACCEPT'
     def __repr__(self):
         return f"Job(id={self.id}, type={self.type}, nnodes={self.nnodes}, time={self.time}, start={self.start}, priority={self.priority})"
 
@@ -58,16 +57,50 @@ def map(sched_map, job):
     job.status = "HOLD"
     return None
 
+def show_jobs(str):
+    df = pd.DataFrame([{
+        'Job ID': job.id,
+        'Status': job.status,
+        'Type': job.type,
+        'Nodes': job.nnodes,
+        'Elapsed Time': job.time,
+        'Start Time': job.start,
+        'Priority': job.priority,
+        } for job in st.session_state[str]]
+    )
+    st.table(df)
+
+def plot(jobs):
+    fig, ax = plt.subplots()
+    ax.set_ylim(0, HPC_NODES)
+    ax.set_xlim(0, SCHED_MAP_TIME)
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Nodes')
+    # ax.grid(True)
+    # ax.set_xticklabels([])
+    # ax.set_yticklabels([])
+    ax.spines['right'].set_color('none')
+    ax.spines['top'].set_color('none')
+
+    sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME))
+    for job in jobs:
+        ret = map(sched_map, job)
+        if ret:
+            col = ret[0]
+            row = ret[1]
+            rect = patches.Rectangle((col,row), job.time, job.nnodes, edgecolor="black", facecolor="orange")
+            ax.add_patch(rect)
+            ax.text(col+job.time/2, row+job.nnodes/2, f"{job.id}-{job.type}", size=10, horizontalalignment='center', verticalalignment='center')
+    # st.write(sched_map[::-1]) # np.array index align with axis
+    show_jobs('jobs_scheduled')
+
+    st.pyplot(fig) 
 
 def app_layout():
-
-    # st.set_page_config(layout="wide")
     st.title("QCSchduler Simulation")
-
     st.divider()
 
     st.header('Jobs Submitted')
-
     col1, col2, col3, col4, col5 = st.columns(5)
     type = col1.selectbox(
         "Job Type",
@@ -78,84 +111,38 @@ def app_layout():
     start = col4.number_input('Start Time', min_value=-1, max_value=120, value=1, step=1)
     priority = col5.number_input('Priority', min_value=1, max_value=20, value=1, step=1)
 
-    if "jobs" not in st.session_state:
-        st.session_state["jobs"] = []
+    if "jobs_submitted" not in st.session_state:
+        st.session_state["jobs_submitted"] = []
+        st.session_state["jobs_scheduled"] = []
 
-    submit = st.button(label='Submit')
-    if submit:
-        st.session_state["jobs"].append(Job(id=f'{len(st.session_state["jobs"]):05d}', 
-                                            type=type, 
-                                            nnodes=nnodes,
-                                            time=time,
-                                            start=start,
-                                            priority= priority
-                                            )
-                                        )
-
-    df = pd.DataFrame([{
-                    'Job ID': job.id,
-                    'Type': job.type,
-                    'Nodes': job.nnodes,
-                    'Elapsed Time': job.time,
-                    'Start Time': job.start,
-                    'Priority': job.priority,
-                    } for job in st.session_state["jobs"]]
-    )
-
-    st.table(df)
-
-    clear = st.button(label='Clear')
-    if clear:
+    if st.button(label='Submit'):
+        st.session_state["jobs_submitted"].append(Job(id=f'{len(st.session_state["jobs_submitted"]):05d}', 
+                                                    type=type, 
+                                                    nnodes=nnodes,
+                                                    time=time,
+                                                    start=start,
+                                                    priority= priority
+                                                    )
+                                                )
+    show_jobs('jobs_submitted')
+    if st.button(label='Clear'):
         for key in st.session_state.keys():
             del st.session_state[key] 
         st.rerun()
 
-    st.divider()
-
     st.header('Jobs Scheduled')
-
     algo = st.selectbox(
         'Select Scheduling Algorithm', 
         ('FCFS', 'SJF', 'Priority'),
     )
-
-    schedule = st.button(label='Schedule')
-    if schedule:
-        fig, ax = plt.subplots()
-        ax.set_ylim(0, HPC_NODES)
-        ax.set_xlim(0, SCHED_MAP_TIME)
-        ax.set_xlabel('Time')
-        ax.set_ylabel('Nodes')
-        # ax.grid(True)
-        # ax.set_xticklabels([])
-        # ax.set_yticklabels([])
-        ax.spines['right'].set_color('none')
-        ax.spines['top'].set_color('none')
-
-        if len(st.session_state["jobs"]) > 0:
-            sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME))
-            for job in st.session_state["jobs"]:
-                ret = map(sched_map, job)
-                if ret:
-                    col = ret[0]
-                    row = ret[1]
-                    rect = patches.Rectangle((col,row), job.time, job.nnodes, edgecolor="black", facecolor="orange")
-                    ax.add_patch(rect)
-                    ax.text(col+job.time/2, row+job.nnodes/2, f"{job.id}-{job.type}", size=10, horizontalalignment='center', verticalalignment='center')
-            # st.write(sched_map[::-1]) # np.array index align with axis
-            df = pd.DataFrame([{
-                'Job ID': job.id,
-                'Status': job.status,
-                'Type': job.type,
-                'Nodes': job.nnodes,
-                'Elapsed Time': job.time,
-                'Start Time': job.start,
-                'Priority': job.priority,
-                } for job in st.session_state["jobs"]]
-            )
-            st.table(df)
-        st.pyplot(fig) 
+    if st.button(label='Schedule'):
+        st.session_state["jobs_scheduled"] = st.session_state["jobs_submitted"].copy()
+        if algo == 'SJF':
+            st.session_state["jobs_scheduled"].sort(key=lambda job: job.nnodes*job.time)
+        elif algo == 'Priority':
+            st.session_state["jobs_scheduled"].sort(key=lambda job: job.priority)
+    if len(st.session_state["jobs_scheduled"]) > 0:   
+        plot(st.session_state["jobs_scheduled"])
       
-
 if __name__=='__main__':
     app_layout()
