@@ -22,41 +22,59 @@ class Job:
     def __repr__(self):
         return f"Job(id={self.id}, type={self.type}, nnodes={self.nnodes}, time={self.time}, start={self.start}, priority={self.priority})"
 
-def turn_around_time(arrival,finish):
-    """
-    Provide arrival time and finish time as array inputs returns 
-    """
-    turn_around_time=[]
-    for x in range(len(arrival)):
-        turn_around_time.append(finish[x]-arrival[x])
-    return turn_around_time
+# def turn_around_time(arrival,finish):
+#     """
+#     Provide arrival time and finish time as array inputs returns 
+#     """
+#     turn_around_time=[]
+#     for x in range(len(arrival)):
+#         turn_around_time.append(finish[x]-arrival[x])
+#     return turn_around_time
 
-def wait_time(turn_around,burst):
-    """
-    provide array input and will produce array as output
-    """
-    wait=[]
-    for x in range(len(burst)):
-        wait.append(turn_around[x]-burst[x])
-    return wait
+# def wait_time(turn_around,burst):
+#     """
+#     provide array input and will produce array as output
+#     """
+#     wait=[]
+#     for x in range(len(burst)):
+#         wait.append(turn_around[x]-burst[x])
+#     return wait
 
-def make_dataframe(process,start,burst,finish,turn_around,wait):
-    """
-    provide the arrays for all attributes and converted dataframe will be returned
-    """
-    df=pd.DataFrame({"Process":process,'Arrival Time':start,"Burst Time":burst,'Completion Time':finish,'Turn Around Time':turn_around,'Waiting Time':wait}).sort_values(by ='Process')
-    return df
+# def make_dataframe(process,start,burst,finish,turn_around,wait):
+#     """
+#     provide the arrays for all attributes and converted dataframe will be returned
+#     """
+#     df=pd.DataFrame({"Process":process,'Arrival Time':start,"Burst Time":burst,'Completion Time':finish,'Turn Around Time':turn_around,'Waiting Time':wait}).sort_values(by ='Process')
+#     return df
 
 def map(sched_map, job):
-    if job.start + job.time < SCHED_MAP_TIME:
-        for col in range(max(job.start,0), SCHED_MAP_TIME-job.time): # x-axis
-            for row in range(HPC_NODES-job.nnodes): # y-axis
-                if np.all(sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0):
-                    sched_map[row:(row+job.nnodes), col:(col+job.time)] = 1
-                    job.status = "QUEUED"
-                    return (col, row)
-    job.status = "HOLD"
+    if job.status == "ACCEPT":
+        if job.start + job.time < SCHED_MAP_TIME:
+            for col in range(max(job.start,0), SCHED_MAP_TIME-job.time): # x-axis
+                for row in range(HPC_NODES-job.nnodes): # y-axis
+                    if np.all(sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0):
+                        sched_map[row:(row+job.nnodes), col:(col+job.time)] = 1
+                        job.status = "QUEUED"
+                        return (col, row)
+    if job.status != "QUEUED": 
+        job.status = "HOLD"
     return None
+
+
+def schedule(sched_map, jobs):
+    for job in jobs:
+        ret = map(sched_map, job)
+        if ret:
+            col = ret[0]
+            row = ret[1]
+            fc = 'green'
+            if job.type == 'QC':
+                fc = 'orange'
+            rect = patches.Rectangle((col,row), job.time, job.nnodes, edgecolor='black', facecolor=fc)
+            st.session_state["ax"].add_patch(rect)
+            st.session_state["ax"].text(col+job.time/2, row+job.nnodes/2, f"{job.id}-{job.type}", size=10, horizontalalignment='center', verticalalignment='center')
+    # st.write(sched_map[::-1]) # np.array index align with axis
+
 
 def show_jobs(str):
     df = pd.DataFrame([{
@@ -70,37 +88,6 @@ def show_jobs(str):
         } for job in st.session_state[str]]
     )
     st.table(df)
-
-def plot(jobs):
-    fig, ax = plt.subplots()
-    ax.set_ylim(0, HPC_NODES)
-    ax.set_xlim(0, SCHED_MAP_TIME)
-    ax.set_xlabel('Time')
-    ax.set_ylabel('Nodes')
-    # ax.grid(True)
-    # ax.set_xticklabels([])
-    # ax.set_yticklabels([])
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
-    ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
-    ax.spines['right'].set_color('none')
-    ax.spines['top'].set_color('none')
-
-    sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME))
-    for job in jobs:
-        ret = map(sched_map, job)
-        if ret:
-            col = ret[0]
-            row = ret[1]
-            fc = 'green'
-            if job.type == 'QC':
-                fc = 'orange'
-            rect = patches.Rectangle((col,row), job.time, job.nnodes, edgecolor='black', facecolor=fc)
-            ax.add_patch(rect)
-            ax.text(col+job.time/2, row+job.nnodes/2, f"{job.id}-{job.type}", size=10, horizontalalignment='center', verticalalignment='center')
-    # st.write(sched_map[::-1]) # np.array index align with axis
-    show_jobs('jobs_scheduled')
-
-    st.pyplot(fig) 
 
 def sort_key_fcfs(job):
     type_order = 0 if job.type == 'QC' else 1
@@ -131,6 +118,19 @@ def app_layout():
     if "jobs_submitted" not in st.session_state:
         st.session_state["jobs_submitted"] = []
         st.session_state["jobs_scheduled"] = []
+        st.session_state["sched_map"] = np.zeros((HPC_NODES, SCHED_MAP_TIME))
+        st.session_state["fig"], st.session_state["ax"] = plt.subplots()
+        st.session_state["ax"].set_ylim(0, HPC_NODES)
+        st.session_state["ax"].set_xlim(0, SCHED_MAP_TIME)
+        st.session_state["ax"].set_xlabel('Time')
+        st.session_state["ax"].set_ylabel('Nodes')
+        # ax.grid(True)
+        # ax.set_xticklabels([])
+        # ax.set_yticklabels([])
+        st.session_state["ax"].xaxis.set_major_locator(ticker.MultipleLocator(2))
+        st.session_state["ax"].xaxis.set_minor_locator(ticker.MultipleLocator(1))
+        st.session_state["ax"].spines['right'].set_color('none')
+        st.session_state["ax"].spines['top'].set_color('none')
 
     if st.button(label='Submit'):
         st.session_state["jobs_submitted"].append(Job(id=f'{len(st.session_state["jobs_submitted"]):05d}', 
@@ -160,7 +160,9 @@ def app_layout():
         elif algo == 'Priority':
             st.session_state["jobs_scheduled"].sort(key=sort_key_priority)
     if len(st.session_state["jobs_scheduled"]) > 0:   
-        plot(st.session_state["jobs_scheduled"])
+        schedule(st.session_state["sched_map"], st.session_state["jobs_scheduled"])
+        show_jobs('jobs_scheduled')
+        st.pyplot(st.session_state["fig"]) 
       
 if __name__=='__main__':
     app_layout()
