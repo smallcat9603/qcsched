@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import matplotlib.patches as patches
 
 HPC_NODES = 10
@@ -79,6 +80,8 @@ def plot(jobs):
     # ax.grid(True)
     # ax.set_xticklabels([])
     # ax.set_yticklabels([])
+    ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
+    ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
     ax.spines['right'].set_color('none')
     ax.spines['top'].set_color('none')
 
