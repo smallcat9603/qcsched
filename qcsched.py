@@ -91,7 +91,10 @@ def plot(jobs):
         if ret:
             col = ret[0]
             row = ret[1]
-            rect = patches.Rectangle((col,row), job.time, job.nnodes, edgecolor="black", facecolor="orange")
+            fc = 'green'
+            if job.type == 'QC':
+                fc = 'orange'
+            rect = patches.Rectangle((col,row), job.time, job.nnodes, edgecolor='black', facecolor=fc)
             ax.add_patch(rect)
             ax.text(col+job.time/2, row+job.nnodes/2, f"{job.id}-{job.type}", size=10, horizontalalignment='center', verticalalignment='center')
     # st.write(sched_map[::-1]) # np.array index align with axis
@@ -99,19 +102,30 @@ def plot(jobs):
 
     st.pyplot(fig) 
 
+def sort_key_fcfs(job):
+    type_order = 0 if job.type == 'QC' else 1
+    return type_order
+
+def sort_key_sjf(job):
+    type_order = 0 if job.type == 'QC' else 1
+    return (type_order, job.nnodes*job.time)
+
+def sort_key_priority(job):
+    type_order = 0 if job.type == 'QC' else 1
+    return (type_order, job.priority)
+
 def app_layout():
     st.title("QCSchduler Simulation")
     st.divider()
 
     st.header('Jobs Submitted')
     col1, col2, col3, col4, col5 = st.columns(5)
-    type = col1.selectbox(
-        "Job Type",
-        ("QC", "HPC"),
+    type = col1.segmented_control(
+        'Job Type', ['HPC', 'QC'], default='HPC'
     )
     nnodes = col2.number_input('HPC Nodes', min_value=1, max_value=96, value=1, step=1)
     time = col3.number_input('Elapsed Time', min_value=1, max_value=60, value=5, step=1)
-    start = col4.number_input('Start Time', min_value=-1, max_value=120, value=1, step=1)
+    start = col4.number_input('Start Time', min_value=-1, max_value=120, value=0, step=1)
     priority = col5.number_input('Priority', min_value=1, max_value=20, value=1, step=1)
 
     if "jobs_submitted" not in st.session_state:
@@ -134,16 +148,17 @@ def app_layout():
         st.rerun()
 
     st.header('Jobs Scheduled')
-    algo = st.selectbox(
-        'Select Scheduling Algorithm', 
-        ('FCFS', 'SJF', 'Priority'),
+    algo = st.segmented_control(
+        'Select Scheduling Algorithm', ['FCFS', 'SJF', 'Priority'], default='FCFS'
     )
     if st.button(label='Schedule'):
-        st.session_state["jobs_scheduled"] = st.session_state["jobs_submitted"].copy()
-        if algo == 'SJF':
-            st.session_state["jobs_scheduled"].sort(key=lambda job: job.nnodes*job.time)
+        st.session_state["jobs_scheduled"] = st.session_state["jobs_submitted"].copy() # separate individuals, but the same child attribute
+        if algo == 'FCFS':
+            st.session_state["jobs_scheduled"].sort(key=sort_key_fcfs)
+        elif algo == 'SJF':
+            st.session_state["jobs_scheduled"].sort(key=sort_key_sjf)
         elif algo == 'Priority':
-            st.session_state["jobs_scheduled"].sort(key=lambda job: job.priority)
+            st.session_state["jobs_scheduled"].sort(key=sort_key_priority)
     if len(st.session_state["jobs_scheduled"]) > 0:   
         plot(st.session_state["jobs_scheduled"])
       
