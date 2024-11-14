@@ -120,14 +120,14 @@ def app_layout():
     st.divider()
 
     st.header('Jobs Submitted')
-    col1, col2, col3, col4, col5 = st.columns(5)
-    type = col1.segmented_control(
+    type = st.segmented_control(
         'Job Type', ['HPC', 'QC1', 'QC2'], default='HPC'
     )
-    nnodes = col2.number_input('HPC Nodes', min_value=1, max_value=96, value=1, step=1)
-    time = col3.number_input('Elapsed Time', min_value=1, max_value=60, value=5, step=1)
-    start = col4.number_input('Start Time', min_value=-1, max_value=120, value=0, step=1)
-    priority = col5.number_input('Priority', min_value=1, max_value=20, value=1, step=1)
+    col1, col2, col3, col4 = st.columns([1,1,1,1])
+    nnodes = col1.number_input('HPC Nodes', min_value=1, max_value=96, value=1, step=1)
+    time = col2.number_input('Elapsed Time', min_value=1, max_value=60, value=5, step=1)
+    start = col3.number_input('Start Time', min_value=-1, max_value=120, value=0, step=1)
+    priority = col4.number_input('Priority', min_value=1, max_value=20, value=1, step=1)
 
     if "jobs_submitted" not in st.session_state:
         st.session_state["jobs_submitted"] = []
