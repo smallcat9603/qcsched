@@ -49,9 +49,9 @@ class Job:
 
 def map(job):
     if job.status == "ACCEPT":
-        if job.start + job.time < SCHED_MAP_TIME:
-            for col in range(max(job.start,0), SCHED_MAP_TIME-job.time): # x-axis
-                for row in range(HPC_NODES-job.nnodes): # y-axis
+        if job.start + job.time < SCHED_MAP_TIME+1:
+            for col in range(job.start, SCHED_MAP_TIME-job.time+1): # x-axis
+                for row in range(HPC_NODES-job.nnodes+1): # y-axis
                     if np.all(st.session_state["sched_map"][row:(row+job.nnodes), col:(col+job.time)] == 0):
                         if job.type == 'QC1':
                             st.session_state["sched_map"][row:(row+job.nnodes), col:(col+job.time)] = 91
@@ -126,7 +126,7 @@ def app_layout():
     col1, col2, col3, col4 = st.columns([1,1,1,1])
     nnodes = col1.number_input('HPC Nodes', min_value=1, max_value=96, value=1, step=1)
     time = col2.number_input('Elapsed Time', min_value=1, max_value=60, value=5, step=1)
-    start = col3.number_input('Start Time', min_value=-1, max_value=120, value=0, step=1)
+    start = col3.number_input('Start Time', min_value=0, max_value=120, value=0, step=1)
     priority = col4.number_input('Priority', min_value=1, max_value=20, value=1, step=1)
 
     if "jobs_submitted" not in st.session_state:
