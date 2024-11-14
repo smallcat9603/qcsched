@@ -53,7 +53,12 @@ def map(job):
             for col in range(max(job.start,0), SCHED_MAP_TIME-job.time): # x-axis
                 for row in range(HPC_NODES-job.nnodes): # y-axis
                     if np.all(st.session_state["sched_map"][row:(row+job.nnodes), col:(col+job.time)] == 0):
-                        st.session_state["sched_map"][row:(row+job.nnodes), col:(col+job.time)] = 1
+                        if job.type == 'QC1':
+                            st.session_state["sched_map"][row:(row+job.nnodes), col:(col+job.time)] = 91
+                        elif job.type == 'QC2':
+                            st.session_state["sched_map"][row:(row+job.nnodes), col:(col+job.time)] = 92
+                        else:
+                            st.session_state["sched_map"][row:(row+job.nnodes), col:(col+job.time)] = 1
                         job.status = "QUEUED"
                         return (col, row)
     if job.status != "QUEUED": 
@@ -75,8 +80,10 @@ def schedule(algo):
             col = ret[0]
             row = ret[1]
             fc = 'green'
-            if job.type == 'QC':
+            if job.type == 'QC1':
                 fc = 'orange'
+            elif job.type == 'QC2':
+                fc = 'violet'
             rect = patches.Rectangle((col,row), job.time, job.nnodes, edgecolor='black', facecolor=fc)
             st.session_state["ax"].add_patch(rect)
             st.session_state["ax"].text(col+job.time/2, row+job.nnodes/2, f"{job.id}-{job.type}", size=10, horizontalalignment='center', verticalalignment='center')
@@ -115,7 +122,7 @@ def app_layout():
     st.header('Jobs Submitted')
     col1, col2, col3, col4, col5 = st.columns(5)
     type = col1.segmented_control(
-        'Job Type', ['HPC', 'QC'], default='HPC'
+        'Job Type', ['HPC', 'QC1', 'QC2'], default='HPC'
     )
     nnodes = col2.number_input('HPC Nodes', min_value=1, max_value=96, value=1, step=1)
     time = col3.number_input('Elapsed Time', min_value=1, max_value=60, value=5, step=1)
