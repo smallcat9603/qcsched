@@ -41,6 +41,15 @@ class JobManager:
         self.jobs_submitted = []
         self.jobs_scheduled = []
         self.sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME))
+        self.fig, self.ax = plt.subplots(figsize=(8, 6))
+        self.ax.set_ylim(0, HPC_NODES)
+        self.ax.set_xlim(0, SCHED_MAP_TIME)
+        self.ax.set_xlabel('Time')
+        self.ax.set_ylabel('Nodes')
+        self.ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
+        self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
+        self.ax.spines['right'].set_color('none')
+        self.ax.spines['top'].set_color('none')
 
 # def turn_around_time(arrival,finish):
 #     """
@@ -107,9 +116,10 @@ def schedule(algo, src):
                 fc = 'orange'
             elif job.type == 'QC2':
                 fc = 'violet'
+            st.session_state[f'job_manager_{src}'].ax.set_title(f'HPC{src+1}')
             rect = patches.Rectangle(job.map, job.time, job.nnodes, edgecolor='black', facecolor=fc)
-            st.session_state['axes'][src].add_patch(rect)
-            st.session_state['axes'][src].text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.id}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
+            st.session_state[f'job_manager_{src}'].ax.add_patch(rect)
+            st.session_state[f'job_manager_{src}'].ax.text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.id}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
     # st.write(sched_map[::-1]) # np.array index align with axis
 
 def show_jobs(src):
@@ -157,19 +167,8 @@ def app_layout():
 
     if 'semaphore' not in st.session_state:
         st.session_state['semaphore'] = Semaphore([], [])
-        st.session_state['fig'], st.session_state['axes'] = plt.subplots(NUM_HPC,1,figsize=(8, 6*NUM_HPC))
         for i in range(NUM_HPC): 
             st.session_state[f'job_manager_{i}'] = JobManager()
-
-            st.session_state['axes'][i].set_title(f'HPC{i+1}')
-            st.session_state['axes'][i].set_ylim(0, HPC_NODES)
-            st.session_state['axes'][i].set_xlim(0, SCHED_MAP_TIME)
-            st.session_state['axes'][i].set_xlabel('Time')
-            st.session_state['axes'][i].set_ylabel('Nodes')
-            st.session_state['axes'][i].xaxis.set_major_locator(ticker.MultipleLocator(2))
-            st.session_state['axes'][i].xaxis.set_minor_locator(ticker.MultipleLocator(1))
-            st.session_state['axes'][i].spines['right'].set_color('none')
-            st.session_state['axes'][i].spines['top'].set_color('none')
 
     if st.button(label='Submit'):
         src = int(hpc[-1]) - 1 
@@ -210,7 +209,9 @@ def app_layout():
             schedule(algo, i)
         st.rerun()
 
-    st.pyplot(st.session_state['fig']) 
+    for i in range(NUM_HPC):
+        if len(st.session_state[f'job_manager_{i}'].jobs_scheduled):
+            st.pyplot(st.session_state[f'job_manager_{i}'].fig) 
       
 if __name__=='__main__':
     app_layout()
