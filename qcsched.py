@@ -10,7 +10,8 @@ SCHED_MAP_TIME = 20
 NUM_HPC = 3
 
 class Job:
-    def __init__(self, id, type, nnodes, time, start, priority):
+    def __init__(self, src, id, type, nnodes, time, start, priority):
+        self.src = src
         self.id = id
         self.type = type
         self.nnodes = nnodes
@@ -21,15 +22,25 @@ class Job:
         self.end = 0
         self.status = 'ACCEPT'
         self.map = None
+        
     def __repr__(self):
-        return f'Job(id={self.id}, type={self.type}, nnodes={self.nnodes}, time={self.time}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map})'
+        return f'Job(id={self.id}, type={self.type}, nnodes={self.nnodes}, time={self.time}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map}, src={self.src})'
     
 class Semaphore:
     def __init__(self, qc1_flag, qc2_flag): # 0: available, 1: occupied
         self.qc1_flag = qc1_flag
         self.qc2_flag = qc2_flag
     def __repr__(self):
-        return f'qc1_flag={self.qc1_flag}, qc2_flag={self.qc2_flag}'    
+        return f'qc1_flag={self.qc1_flag}, qc2_flag={self.qc2_flag}'  
+
+class JobManager:  
+    def __init__(self):
+        self.hpc_count = 0
+        self.qc1_count = 0
+        self.qc2_count = 0
+        self.jobs_submitted = []
+        self.jobs_scheduled = []
+        self.sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME))
 
 # def turn_around_time(arrival,finish):
 #     """
@@ -67,15 +78,12 @@ def map(job):
                     if set(list(range(col, col+job.time))) & set(st.session_state['semaphore'].qc2_flag):
                         continue                    
                 for row in range(HPC_NODES-job.nnodes+1): # y-axis
-                    if np.all(st.session_state[f'sched_map_{job.id[0]}'][row:(row+job.nnodes), col:(col+job.time)] == 0):
+                    if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0):
+                        st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = int(job.id)
                         if job.type == 'QC1':
-                            st.session_state[f'sched_map_{job.id[0]}'][row:(row+job.nnodes), col:(col+job.time)] = 91
                             st.session_state['semaphore'].qc1_flag += list(range(col, col+job.time))
                         elif job.type == 'QC2':
-                            st.session_state[f'sched_map_{job.id[0]}'][row:(row+job.nnodes), col:(col+job.time)] = 92
                             st.session_state['semaphore'].qc2_flag += list(range(col, col+job.time))
-                        else:
-                            st.session_state[f'sched_map_{job.id[0]}'][row:(row+job.nnodes), col:(col+job.time)] = 1
                         job.status = 'QUEUED'
                         job.map = (col, row)
                         return True
@@ -83,15 +91,15 @@ def map(job):
         job.status = 'HOLD'
     return False
 
-def schedule(algo, i):
-    st.session_state[f'jobs_scheduled_{i}'] = st.session_state[f'jobs_submitted_{i}'].copy() # separate individuals, but the same child attribute
+def schedule(algo, src):
+    st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute
     if algo == 'FCFS':
-        st.session_state[f'jobs_scheduled_{i}'].sort(key=sort_key_fcfs)
+        st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_fcfs)
     elif algo == 'SJF':
-        st.session_state[f'jobs_scheduled_{i}'].sort(key=sort_key_sjf)
+        st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_sjf)
     elif algo == 'Priority':
-        st.session_state[f'jobs_scheduled_{i}'].sort(key=sort_key_priority)
-    for job in st.session_state[f'jobs_scheduled_{i}']:
+        st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_priority)
+    for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
         map(job)
         if job.status == 'QUEUED':
             fc = 'green'
@@ -100,12 +108,11 @@ def schedule(algo, i):
             elif job.type == 'QC2':
                 fc = 'violet'
             rect = patches.Rectangle(job.map, job.time, job.nnodes, edgecolor='black', facecolor=fc)
-            st.session_state['axes'][i].add_patch(rect)
-            st.session_state['axes'][i].text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.id}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
+            st.session_state['axes'][src].add_patch(rect)
+            st.session_state['axes'][src].text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.id}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
     # st.write(sched_map[::-1]) # np.array index align with axis
 
-
-def show_jobs(str):
+def show_jobs(src):
     df = pd.DataFrame([{
         'Job ID': job.id,
         'Status': job.status,
@@ -114,7 +121,7 @@ def show_jobs(str):
         'Elapsed Time': job.time,
         'Start Time': job.start,
         'Priority': job.priority,
-        } for job in st.session_state[str]]
+        } for job in st.session_state[f'job_manager_{src}'].jobs_submitted]
     )
     st.table(df)
 
@@ -152,9 +159,7 @@ def app_layout():
         st.session_state['semaphore'] = Semaphore([], [])
         st.session_state['fig'], st.session_state['axes'] = plt.subplots(NUM_HPC,1,figsize=(8, 6*NUM_HPC))
         for i in range(NUM_HPC): 
-            st.session_state[f'jobs_submitted_{i}'] = []
-            st.session_state[f'jobs_scheduled_{i}'] = []
-            st.session_state[f'sched_map_{i}'] = np.zeros((HPC_NODES, SCHED_MAP_TIME))
+            st.session_state[f'job_manager_{i}'] = JobManager()
 
             st.session_state['axes'][i].set_title(f'HPC{i+1}')
             st.session_state['axes'][i].set_ylim(0, HPC_NODES)
@@ -167,18 +172,30 @@ def app_layout():
             st.session_state['axes'][i].spines['top'].set_color('none')
 
     if st.button(label='Submit'):
-        str = f'jobs_submitted_{int(hpc[-1])-1}'
-        st.session_state[str].append(Job(id=f'{int(hpc[-1])-1}{len(st.session_state[str]):05d}', 
-                                        type=type, 
-                                        nnodes=nnodes,
-                                        time=time,
-                                        start=start,
-                                        priority= priority
-                                        )
-                                    )
+        src = int(hpc[-1]) - 1 
+
+        if type == 'QC1':
+            id = f'{hpc[-1]}91{st.session_state[f"job_manager_{src}"].qc1_count:03d}'
+            st.session_state[f'job_manager_{src}'].qc1_count += 1
+        elif type == 'QC2':
+            id = f'{hpc[-1]}92{st.session_state[f"job_manager_{src}"].qc2_count:03d}'
+            st.session_state[f'job_manager_{src}'].qc2_count += 1 
+        else:
+            id = f'{hpc[-1]}{st.session_state[f"job_manager_{src}"].hpc_count:05d}' 
+            st.session_state[f'job_manager_{src}'].hpc_count += 1  
+
+        st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src,
+                                                                        id=id, 
+                                                                        type=type, 
+                                                                        nnodes=nnodes,
+                                                                        time=time,
+                                                                        start=start,
+                                                                        priority=priority
+                                                                        ))
+        
     for i in range(NUM_HPC):
         st.write(f'HPC{i+1}')
-        show_jobs(f'jobs_submitted_{i}')
+        show_jobs(i)
     if st.button(label='Clear'):
         for key in st.session_state.keys():
             del st.session_state[key] 
