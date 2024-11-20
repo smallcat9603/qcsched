@@ -8,6 +8,7 @@ import matplotlib.patches as patches
 HPC_NODES = 10
 SCHED_MAP_TIME = 20
 NUM_HPC = 3
+NUM_QC = 2
 
 class Job:
     def __init__(self, src, id, type, nnodes, time, start, priority):
@@ -27,29 +28,22 @@ class Job:
         return f'Job(id={self.id}, type={self.type}, nnodes={self.nnodes}, time={self.time}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map}, src={self.src})'
     
 class Semaphore:
-    def __init__(self, qc1_flag, qc2_flag): # 0: available, 1: occupied
-        self.qc1_flag = qc1_flag
-        self.qc2_flag = qc2_flag
+    def __init__(self): # 0: available, 1: occupied
+        self.qc_flag = {}
+        for i in range(NUM_QC):
+            self.qc_flag[i] = []
     def __repr__(self):
-        return f'qc1_flag={self.qc1_flag}, qc2_flag={self.qc2_flag}'  
+        return f'qc_flag={self.qc_flag}'  
 
 class JobManager:  
     def __init__(self):
         self.hpc_count = 0
-        self.qc1_count = 0
-        self.qc2_count = 0
+        self.qc_count = {}
+        for i in range(NUM_QC):
+            self.qc_count[i] = 0
         self.jobs_submitted = []
         self.jobs_scheduled = []
         self.sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME))
-        self.fig, self.ax = plt.subplots(figsize=(8, 6))
-        self.ax.set_ylim(0, HPC_NODES)
-        self.ax.set_xlim(0, SCHED_MAP_TIME)
-        self.ax.set_xlabel('Time')
-        self.ax.set_ylabel('Nodes')
-        self.ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
-        self.ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
-        self.ax.spines['right'].set_color('none')
-        self.ax.spines['top'].set_color('none')
 
 # def turn_around_time(arrival,finish):
 #     """
@@ -76,29 +70,66 @@ class JobManager:
 #     df=pd.DataFrame({"Process":process,'Arrival Time':start,"Burst Time":burst,'Completion Time':finish,'Turn Around Time':turn_around,'Waiting Time':wait}).sort_values(by ='Process')
 #     return df
 
-def map(job):
-    if job.status == 'ACCEPT':
-        if job.start + job.time < SCHED_MAP_TIME+1:
+def mapping(job, col, row):
+    st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = int(job.id)
+    if job.type.startswith('QC'):
+        st.session_state['semaphore'].qc_flag[int(job.type[-1])-1] += list(range(col, col+job.time))
+    if job.status == 'STOP':
+        job.status = 'REQUEUED'
+    else:
+        job.status = 'QUEUED'
+    job.map = (col, row)
+
+def release_nodes(job):
+    col = job.map[0]
+    row = job.map[1]
+    st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = 0
+
+def stop_jobs(src, ids):
+    for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+        if int(job.id) in ids:
+            job.status = 'STOP'
+            release_nodes(job)    
+
+def map(job, algo):
+    if job.status == 'ACCEPT' or job.status == 'STOP':
+        if job.start + job.time < SCHED_MAP_TIME + 1:
             for col in range(job.start, SCHED_MAP_TIME-job.time+1): # x-axis
-                if job.type == 'QC1':
-                    if set(list(range(col, col+job.time))) & set(st.session_state['semaphore'].qc1_flag):
-                        continue
-                elif job.type == 'QC2':
-                    if set(list(range(col, col+job.time))) & set(st.session_state['semaphore'].qc2_flag):
+                if job.type.startswith('QC'):
+                    if set(list(range(col, col+job.time))) & set(st.session_state['semaphore'].qc_flag[int(job.type[-1])-1]):
                         continue                    
+
+                nstop = HPC_NODES-job.nnodes+1
+                ids = []
+                col_row = None 
                 for row in range(HPC_NODES-job.nnodes+1): # y-axis
                     if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0):
-                        st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = int(job.id)
-                        if job.type == 'QC1':
-                            st.session_state['semaphore'].qc1_flag += list(range(col, col+job.time))
-                        elif job.type == 'QC2':
-                            st.session_state['semaphore'].qc2_flag += list(range(col, col+job.time))
-                        job.status = 'QUEUED'
-                        job.map = (col, row)
+                        mapping(job, col, row)
                         return True
-    if job.status != 'QUEUED': 
+                    elif algo == "QPriority":
+                        m = st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)]
+                        unique_occupied = np.unique(m[m>0])
+                        if unique_occupied.size < nstop:
+                            nstop = unique_occupied.size
+                            ids = list(unique_occupied)
+                            col_row = (col, row)
+
+                if job.type.startswith('QC') and algo == 'QPriority':
+                    stop_jobs(job.src, ids)                
+                    mapping(job, col_row[0], col_row[1])
+                    return True
+                    
+    if job.status != 'QUEUED' and job.status != 'REQUEUED': 
         job.status = 'HOLD'
     return False
+
+def color(str):
+    colors = {
+        'hpc': 'green',
+        'qc1': 'orange',
+        'qc2': 'violet',
+    }
+    return colors[str]
 
 def schedule(algo, src):
     st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute
@@ -106,20 +137,10 @@ def schedule(algo, src):
         st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_fcfs)
     elif algo == 'SJF':
         st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_sjf)
-    elif algo == 'Priority':
+    elif algo.endswith('Priority'):
         st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_priority)
     for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
-        map(job)
-        if job.status == 'QUEUED':
-            fc = 'green'
-            if job.type == 'QC1':
-                fc = 'orange'
-            elif job.type == 'QC2':
-                fc = 'violet'
-            st.session_state[f'job_manager_{src}'].ax.set_title(f'HPC{src+1}')
-            rect = patches.Rectangle(job.map, job.time, job.nnodes, edgecolor='black', facecolor=fc)
-            st.session_state[f'job_manager_{src}'].ax.add_patch(rect)
-            st.session_state[f'job_manager_{src}'].ax.text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.id}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
+        map(job, algo)
     # st.write(sched_map[::-1]) # np.array index align with axis
 
 def show_jobs(src):
@@ -136,18 +157,46 @@ def show_jobs(src):
     st.table(df)
 
 def sort_key_fcfs(job):
-    type_order = 0 if job.type == 'QC' else 1
+    type_order = 0 if job.type.startswith('QC') else 1
     return type_order
 
 def sort_key_sjf(job):
-    type_order = 0 if job.type == 'QC' else 1
+    type_order = 0 if job.type.startswith('QC') else 1
     return (type_order, job.nnodes*job.time)
 
 def sort_key_priority(job):
-    type_order = 0 if job.type == 'QC' else 1
+    type_order = 0 if job.type.startswith('QC') else 1
     return (type_order, job.priority)
 
+def plot():
+    for src in range(NUM_HPC):
+        if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) > 0:
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.set_title(f'HPC{src+1}')
+            ax.set_ylim(0, HPC_NODES)
+            ax.set_xlim(0, SCHED_MAP_TIME)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Nodes')
+            ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
+            ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
+            ax.spines['right'].set_color('none')
+            ax.spines['top'].set_color('none')
+
+            for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+                # st.write(job)
+                if job.status == 'QUEUED' or job.status == 'REQUEUED':
+                    fc = color('hpc')
+                    if job.type.startswith('QC'):
+                        fc = color(f'qc{job.type[-1]}')
+                
+                    rect = patches.Rectangle(job.map, job.time, job.nnodes, edgecolor='black', facecolor=fc)
+                    ax.add_patch(rect)
+                    ax.text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.id}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
+
+            st.pyplot(fig) 
+
 def app_layout():
+
     st.title('QCSched Simulation')
     st.divider()
 
@@ -166,35 +215,26 @@ def app_layout():
     priority = col4.number_input('Priority', min_value=1, max_value=20, value=1, step=1)
 
     if 'semaphore' not in st.session_state:
-        st.session_state['semaphore'] = Semaphore([], [])
-        for i in range(NUM_HPC): 
-            st.session_state[f'job_manager_{i}'] = JobManager()
+        st.session_state['semaphore'] = Semaphore()
+        for src in range(NUM_HPC): 
+            st.session_state[f'job_manager_{src}'] = JobManager()
 
     if st.button(label='Submit'):
         src = int(hpc[-1]) - 1 
 
-        if type == 'QC1':
-            id = f'{hpc[-1]}91{st.session_state[f"job_manager_{src}"].qc1_count:03d}'
-            st.session_state[f'job_manager_{src}'].qc1_count += 1
-        elif type == 'QC2':
-            id = f'{hpc[-1]}92{st.session_state[f"job_manager_{src}"].qc2_count:03d}'
-            st.session_state[f'job_manager_{src}'].qc2_count += 1 
+        if type.startswith('QC'):
+            qc = int(type[-1]) - 1
+            st.session_state[f"job_manager_{src}"].qc_count[qc] += 1
+            id = f'{hpc[-1]}9{type[-1]}{st.session_state[f"job_manager_{src}"].qc_count[qc]:03d}'            
         else:
-            id = f'{hpc[-1]}{st.session_state[f"job_manager_{src}"].hpc_count:05d}' 
-            st.session_state[f'job_manager_{src}'].hpc_count += 1  
+            st.session_state[f'job_manager_{src}'].hpc_count += 1 
+            id = f'{hpc[-1]}{st.session_state[f"job_manager_{src}"].hpc_count:05d}'  
 
-        st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src,
-                                                                        id=id, 
-                                                                        type=type, 
-                                                                        nnodes=nnodes,
-                                                                        time=time,
-                                                                        start=start,
-                                                                        priority=priority
-                                                                        ))
+        st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
         
-    for i in range(NUM_HPC):
-        st.write(f'HPC{i+1}')
-        show_jobs(i)
+    for src in range(NUM_HPC):
+        st.write(f'HPC{src+1}')
+        show_jobs(src)
     if st.button(label='Clear'):
         for key in st.session_state.keys():
             del st.session_state[key] 
@@ -202,16 +242,14 @@ def app_layout():
 
     st.header('Jobs Scheduled')
     algo = st.segmented_control(
-        'Select Scheduling Algorithm', ['FCFS', 'SJF', 'Priority'], default='Priority'
+        'Select Scheduling Algorithm', ['FCFS', 'SJF', 'Priority', 'QPriority'], default='QPriority'
     )
     if st.button(label='Schedule'):
-        for i in range(NUM_HPC):
-            schedule(algo, i)
+        for src in range(NUM_HPC):
+            schedule(algo, src)
         st.rerun()
 
-    for i in range(NUM_HPC):
-        if len(st.session_state[f'job_manager_{i}'].jobs_scheduled):
-            st.pyplot(st.session_state[f'job_manager_{i}'].fig) 
+    plot()
       
 if __name__=='__main__':
     app_layout()
