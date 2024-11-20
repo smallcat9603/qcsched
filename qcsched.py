@@ -106,12 +106,17 @@ def map(job, algo):
                     if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0):
                         mapping(job, col, row)
                         return True
-                    elif algo == "QPriority":
+                    elif job.type.startswith('QC') and algo == "QPriority":
+                        include_qc = False
                         m = st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)]
-                        unique_occupied = np.unique(m[m>0])
-                        if unique_occupied.size < nstop:
-                            nstop = unique_occupied.size
-                            ids = list(unique_occupied)
+                        unique_occupied = list(np.unique(m[m>0]))
+                        for id in unique_occupied:
+                            if (id//1000)%100 > 90:
+                                include_qc = True
+                                break
+                        if not include_qc and len(unique_occupied) < nstop:
+                            nstop = len(unique_occupied)
+                            ids = unique_occupied
                             col_row = (col, row)
 
                 if job.type.startswith('QC') and algo == 'QPriority':
