@@ -100,11 +100,14 @@ def do_mapping(job, col, row):
     # change semaphore status for qc
     if job.type.startswith('QC'):
         st.session_state['semaphore'].qc_flag[int(job.type[-1])-1] += list(range(col, col+job.time))
-    # change job status    
-    if job.status == 'STOP':
-        job.status = 'REQUEUED'
+    # change job status   
+    if col == 0:
+        job.status = 'RUNNING'
     else:
-        job.status = 'QUEUED'
+        if job.status == 'STOP':
+            job.status = 'REQUEUED'
+        else:
+            job.status = 'QUEUED'
     # record map location
     job.map = (col, row)
 
@@ -123,7 +126,7 @@ def stop_jobs(src, ids):
             release_nodes(job)    
 
 def map(job, algo):
-    if job.status == 'ACCEPT' or job.status == 'STOP':
+    if job.status == 'ACCEPT' or job.status == 'STOP' or job.status == 'HOLD':
         if job.start + job.time < SCHED_MAP_TIME + 1:
             for col in range(job.start, SCHED_MAP_TIME-job.time+1): # x-axis
                 if job.type.startswith('QC'):
@@ -159,8 +162,6 @@ def map(job, algo):
                     # map qc job            
                     do_mapping(job, col_row[0], col_row[1])
                     return True
-                    
-    if job.status != 'QUEUED' and job.status != 'REQUEUED': 
         # cannot be queued within scheduling period
         job.status = 'HOLD'
     return False
@@ -229,7 +230,7 @@ def plot():
 
             for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
                 # st.write(job)
-                if job.status == 'QUEUED' or job.status == 'REQUEUED':
+                if job.status == 'RUNNING' or job.status == 'QUEUED' or job.status == 'REQUEUED':
                     fc = color('hpc')
                     if job.type.startswith('QC'):
                         fc = color(f'qc{job.type[-1]}')
@@ -239,6 +240,35 @@ def plot():
                     ax.text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.id}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
 
             st.pyplot(fig) 
+
+def update_mapping(nsteps):
+    # update sched map
+    for src in range(NUM_HPC):
+        # move to left
+        st.session_state[f'job_manager_{src}'].sched_map[:, :-nsteps] = st.session_state[f'job_manager_{src}'].sched_map[:, nsteps:]
+        # fill rightmost with 0
+        st.session_state[f'job_manager_{src}'].sched_map[:, -nsteps:] = 0
+
+        # update map location
+        for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+            if job.status == 'RUNNING':
+                job.time -= nsteps
+                if job.time <= 0:
+                    job.status = 'FINISH'
+            elif job.status == 'QUEUED' or job.status == 'REQUEUED':
+                start = job.map[0] - nsteps
+                end = start + job.time
+                if end <= 0: # start < 0
+                    job.status = 'FINISH'
+                elif start <= 0: # end > 0
+                    job.status = 'RUNNING'        
+                    job.map = (0, job.map[1])
+                    job.time = end
+                else: # start > 0, end > 0
+                    job.map = (job.map[0]-nsteps, job.map[1])   
+    # update semaphore status for qc
+    for qc in range(NUM_QC):
+        st.session_state['semaphore'].qc_flag[qc] = [t - nsteps for t in st.session_state['semaphore'].qc_flag[qc] if t - nsteps >= 0] 
 
 def app_layout():
 
@@ -282,6 +312,12 @@ def app_layout():
 
     if st.button(label='Schedule'):
         schedule(algo)
+        st.rerun()
+
+    expander = st.expander('Time Flies')
+    nsteps = expander.number_input('Number of Steps Forward', min_value=1, max_value=10, value=1, step=1)
+    if expander.button(label='Proceed'):
+        update_mapping(nsteps)
         st.rerun()
 
     plot()
