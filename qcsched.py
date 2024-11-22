@@ -78,21 +78,39 @@ def init():
             # per hpc
             st.session_state[f'job_manager_{src}'] = JobManager() 
 
-def submit(hpc, type, nnodes, time, start, priority):
-    src = int(hpc[-1]) - 1 
+def get_id(src, type):
     if type.startswith('QC'):
         qc = int(type[-1]) - 1
         # record qc job count at src hpc
         st.session_state[f"job_manager_{src}"].qc_count[qc] += 1
         # allocate qc job id, ex 191000
-        id = f'{hpc[-1]}9{type[-1]}{st.session_state[f"job_manager_{src}"].qc_count[qc]:03d}'            
+        id = f'{src+1}9{type[-1]}{st.session_state[f"job_manager_{src}"].qc_count[qc]:03d}'            
     else:
         # record hpc job count at src hpc
         st.session_state[f'job_manager_{src}'].hpc_count += 1 
         # allocate hpc job id, ex 100000
-        id = f'{hpc[-1]}{st.session_state[f"job_manager_{src}"].hpc_count:05d}'  
+        id = f'{src+1}{st.session_state[f"job_manager_{src}"].hpc_count:05d}' 
+    return id
+
+def submit(hpc, type, nnodes, time, start, priority):
+    src = int(hpc[-1]) - 1  
+    id = get_id(src, type)
     # record all jobs at src hpc
     st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
+
+@st.cache_data
+def import_file(uploaded_file):
+    df = pd.read_csv(uploaded_file, comment='#', header=None)
+    for idx, row in df.iterrows():
+        src = int(row[0][-1]) - 1
+        type = row[1]
+        nnodes = int(row[2])
+        time = int(row[3])
+        start = int(row[4])
+        priority = int(row[5]) 
+        id = get_id(src, type)
+        # record all jobs at src hpc
+        st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
 
 def do_mapping(job, col, row):
     # fill in sched map with job id
@@ -296,6 +314,11 @@ def app_layout():
 
     if st.button(label='Submit'):
         submit(hpc, type, nnodes, time, start, priority)
+
+    expander = st.expander('Import')
+    uploaded_file = expander.file_uploader("Choose a file")
+    if uploaded_file is not None:
+        import_file(uploaded_file)
         
     show_submitted_jobs()
 
