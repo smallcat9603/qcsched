@@ -141,7 +141,10 @@ def stop_jobs(src, ids):
             # change job status
             job.status = 'STOP'
             # restore sched map with 0
-            release_nodes(job)    
+            release_nodes(job)  
+
+def check_mapping(src):
+    st.write(st.session_state[f'job_manager_{src}'].sched_map[::-1]) # np.array index align with axis  
 
 def map(job, algo):
     if job.status == 'ACCEPT' or job.status == 'STOP' or job.status == 'HOLD':
@@ -174,7 +177,7 @@ def map(job, algo):
                             # qc job location to be mapped
                             col_row = (col, row)
 
-                if job.type.startswith('QC') and algo == 'QPriority':
+                if col == 0 and col_row and job.type.startswith('QC') and algo == 'QPriority':
                     # stop running hpc jobs
                     stop_jobs(job.src, ids)    
                     # map qc job            
@@ -203,7 +206,6 @@ def schedule(algo):
             st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_priority)
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
             map(job, algo)
-        # st.write(sched_map[::-1]) # np.array index align with axis
 
 def show_submitted_jobs():
     for src in range(NUM_HPC):
