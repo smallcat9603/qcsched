@@ -11,9 +11,10 @@ NUM_HPC = 3
 NUM_QC = 2
 
 class Job:
-    def __init__(self, src, id, type, nnodes, time, start, priority):
+    def __init__(self, src, id, vid, type, nnodes, time, start, priority):
         self.src = src
         self.id = id
+        self.vid = vid
         self.type = type
         self.nnodes = nnodes
         self.time = time 
@@ -92,11 +93,19 @@ def get_id(src, type):
         id = f'{src+1}{st.session_state[f"job_manager_{src}"].hpc_count:05d}' 
     return id
 
+def get_vid(src):
+    vid = st.session_state[f"job_manager_{src}"].hpc_count
+    for qc in range(NUM_QC):
+        vid += st.session_state[f"job_manager_{src}"].qc_count[qc]
+    vid = f'{src+1}{vid:05d}'            
+    return vid
+
 def submit(hpc, type, nnodes, time, start, priority):
     src = int(hpc[-1]) - 1  
     id = get_id(src, type)
+    vid = get_vid(src)
     # record all jobs at src hpc
-    st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
+    st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
 
 @st.cache_data
 def import_file(uploaded_file):
@@ -109,8 +118,9 @@ def import_file(uploaded_file):
         start = int(row[4])
         priority = int(row[5]) 
         id = get_id(src, type)
+        vid = get_vid(src)
         # record all jobs at src hpc
-        st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
+        st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
 
 def do_mapping(job, col, row):
     # fill in sched map with job id
@@ -211,7 +221,7 @@ def show_submitted_jobs():
     for src in range(NUM_HPC):
         st.write(f'HPC{src+1}')
         df = pd.DataFrame([{
-            'Job ID': job.id,
+            'Job ID': job.vid,
             'Status': job.status,
             'Type': job.type,
             'Nodes': job.nnodes,
@@ -257,7 +267,7 @@ def plot():
                 
                     rect = patches.Rectangle(job.map, job.time, job.nnodes, edgecolor='black', facecolor=fc)
                     ax.add_patch(rect)
-                    ax.text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.id}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
+                    ax.text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.vid}-{job.priority}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
 
             st.pyplot(fig) 
 
