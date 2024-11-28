@@ -13,8 +13,8 @@ NUM_QC = 2
 class Job:
     def __init__(self, src, id, vid, type, nnodes, time, start, priority):
         self.src = src
-        self.id = id
-        self.vid = vid
+        self.id = id # for display
+        self.vid = vid # for node mapping use
         self.type = type
         self.nnodes = nnodes
         self.time = time 
@@ -205,6 +205,7 @@ def color(str):
     }
     return colors[str]
 
+# not consider inter-hpc priority
 def schedule(algo):
     for src in range(NUM_HPC):
         st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute, ex jobs can be separately added or removed but job attribute modification will reflect to both
@@ -216,6 +217,39 @@ def schedule(algo):
             st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_priority)
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
             map(job, algo)
+
+# consider inter-hpc priority
+def schedule_qc(algo):
+    qc_scheduled = [] # all qc jobs
+    for src in range(NUM_HPC):
+        st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute, ex jobs can be separately added or removed but job attribute modification will reflect to both
+        if algo == 'FCFS':
+            st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_fcfs)
+        elif algo == 'SJF':
+            st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_sjf)
+        elif algo.endswith('Priority'):
+            st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_priority)
+        
+        for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+            if job.type.startswith('QC'):
+                qc_scheduled.append(job)
+            else:
+                break
+
+    qc_scheduled.sort(key=sort_key_qc)
+
+    # schdule qc jobs
+    for qc_job in qc_scheduled:
+        for src in range(NUM_HPC):
+            for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+                if qc_job.id == job.id:
+                    map(job, algo)
+
+    # schedule hpc jobs
+    for src in range(NUM_HPC):
+        for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+            if job.type == 'HPC':
+                map(job, algo)  
 
 def show_submitted_jobs():
     for src in range(NUM_HPC):
@@ -243,6 +277,10 @@ def sort_key_sjf(job):
 def sort_key_priority(job):
     type_order = 0 if job.type.startswith('QC') else 1
     return (type_order, job.priority)
+
+def sort_key_qc(job):
+    qc_num = int(job.type[-1])
+    return (qc_num, job.priority)
 
 def plot():
     for src in range(NUM_HPC):
@@ -346,7 +384,8 @@ def app_layout():
     )
 
     if st.button(label='Schedule'):
-        schedule(algo)
+        # schedule(algo)
+        schedule_qc(algo)
         st.rerun()
 
     expander = st.expander('Time Flies')
