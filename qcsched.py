@@ -373,6 +373,7 @@ def app_layout():
     show_submitted_jobs()
 
     if st.button(label='Clear'):
+        st.cache_data.clear() # clear cache data via @st.cache_data, not including st.session_state
         for key in st.session_state.keys():
             del st.session_state[key] 
         st.rerun()
