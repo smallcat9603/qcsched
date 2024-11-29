@@ -248,7 +248,7 @@ def schedule_qc(algo):
     # schedule hpc jobs
     for src in range(NUM_HPC):
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
-            if job.type == 'HPC':
+            if not job.type.startswith('QC'):              
                 map(job, algo)  
 
 def show_submitted_jobs():
