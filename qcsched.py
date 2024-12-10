@@ -295,7 +295,7 @@ def qc_util(arr_qc_flag):
             result.append((cur, t-cur+1))
     return result
 
-def plot():
+def plot_qc():
     for i in range(NUM_QC):
         # st.write(st.session_state['semaphore'].qc_flag[i])
         if np.any(st.session_state['semaphore'].qc_flag[i] > 0):
@@ -317,8 +317,9 @@ def plot():
                 ax.add_patch(rect)
                 ax.text(util[0]+util[1]/2, 1/2, f'{st.session_state['semaphore'].qc_flag[i][util[0]]}', size=10, horizontalalignment='center', verticalalignment='center')   
 
-            st.pyplot(fig)              
+            st.pyplot(fig)  
 
+def plot_hpc():
     for src in range(NUM_HPC):
         if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) > 0:
             fig, ax = plt.subplots(figsize=(8, 6))
@@ -343,7 +344,11 @@ def plot():
                     ax.add_patch(rect)
                     ax.text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.vid}-{job.priority}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
 
-            st.pyplot(fig) 
+            st.pyplot(fig)
+
+def plot():
+    plot_qc()
+    plot_hpc()
 
 def update_mapping(nsteps):
     # update sched map
@@ -432,6 +437,7 @@ def app_layout():
     nsteps = expander.number_input('Number of Steps Forward', min_value=1, max_value=10, value=1, step=1)
     if expander.button(label='Proceed'):
         update_mapping(nsteps)
+        schedule_qc(algo)
         st.rerun()
 
     plot()
