@@ -13,8 +13,8 @@ NUM_QC = 2
 class Job:
     def __init__(self, src, id, vid, type, nnodes, time, start, priority):
         self.src = src
-        self.id = id # for display
-        self.vid = vid # for node mapping use
+        self.id = id # for node mapping use, can identify qc job or not
+        self.vid = vid # for display, cannot identify qc job or not
         self.type = type
         self.nnodes = nnodes
         self.time = time 
@@ -31,8 +31,8 @@ class Job:
 class Semaphore:
     def __init__(self): # 0: available, 1: occupied
         self.qc_flag = {}
-        for i in range(NUM_QC):
-            self.qc_flag[i] = []
+        for i in range(NUM_QC): 
+            self.qc_flag[i] = np.zeros(SCHED_MAP_TIME, dtype=int) # t represents (t, t+1) occupation
     def __repr__(self):
         return f'qc_flag={self.qc_flag}'  
 
@@ -44,7 +44,7 @@ class JobManager:
             self.qc_count[i] = 0
         self.jobs_submitted = []
         self.jobs_scheduled = []
-        self.sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME))
+        self.sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME), dtype=int) # (n, t) represents (t, t+1) occupation at n-th node
 
 # def turn_around_time(arrival,finish):
 #     """
@@ -127,7 +127,7 @@ def do_mapping(job, col, row):
     st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = int(job.id)
     # change semaphore status for qc
     if job.type.startswith('QC'):
-        st.session_state['semaphore'].qc_flag[int(job.type[-1])-1] += list(range(col, col+job.time))
+        st.session_state['semaphore'].qc_flag[int(job.type[-1])-1][col:col+job.time] = job.vid
     # change job status   
     if col == 0:
         job.status = 'RUNNING'
@@ -161,7 +161,7 @@ def map(job, algo):
         if job.start + job.time < SCHED_MAP_TIME + 1:
             for col in range(job.start, SCHED_MAP_TIME-job.time+1): # x-axis
                 if job.type.startswith('QC'):
-                    if set(list(range(col, col+job.time))) & set(st.session_state['semaphore'].qc_flag[int(job.type[-1])-1]):
+                    if np.any(st.session_state['semaphore'].qc_flag[int(job.type[-1])-1][col:col+job.time] > 0):
                         continue                    
 
                 nstop = HPC_NODES-job.nnodes+1
@@ -282,23 +282,23 @@ def sort_key_qc(job):
     qc_num = int(job.type[-1])
     return (qc_num, job.priority)
 
-def qc_util(list_qc_flag):
+def qc_util(arr_qc_flag):
     result = []
-    start = list_qc_flag[0]
-
-    for t in range(1, len(list_qc_flag)):
-        if list_qc_flag[t] > list_qc_flag[t-1] + 1:
-            length = list_qc_flag[t-1] - start
-            result.append((start, length))
-            start = list_qc_flag[t]
-
-    if list_qc_flag[-1] > start:
-        result.append((start, list_qc_flag[-1]-start))
+    cur = 0
+    for t in range(1, SCHED_MAP_TIME):
+        if arr_qc_flag[t] != arr_qc_flag[t-1]:
+            if arr_qc_flag[t-1] > 0:
+                result.append((cur, t-cur))
+            if arr_qc_flag[t] > 0:
+                cur = t
+        if t == SCHED_MAP_TIME - 1 and arr_qc_flag[t] > 0:
+            result.append((cur, t-cur+1))
     return result
 
 def plot():
     for i in range(NUM_QC):
-        if len(st.session_state['semaphore'].qc_flag[i]) > 0:
+        # st.write(st.session_state['semaphore'].qc_flag[i])
+        if np.any(st.session_state['semaphore'].qc_flag[i] > 0):
             fig, ax = plt.subplots(figsize=(8, 1))
             ax.set_title(f'QC{i+1}')
             ax.set_ylim(0, 1)
@@ -310,14 +310,12 @@ def plot():
             ax.spines['right'].set_color('none')
             ax.spines['top'].set_color('none')
 
-            # st.write(st.session_state['semaphore'].qc_flag[i])
-
             fc = color(f'qc{i+1}')
             utils = qc_util(st.session_state['semaphore'].qc_flag[i])
             for util in utils:
-                rect = patches.Rectangle((util[0], 0), util[1]+1, 1, edgecolor='black', facecolor=fc)
+                rect = patches.Rectangle((util[0], 0), util[1], 1, edgecolor='black', facecolor=fc)
                 ax.add_patch(rect)
-                ax.text(util[0]+util[1]/2, 1/2, '', size=10, horizontalalignment='center', verticalalignment='center')   
+                ax.text(util[0]+util[1]/2, 1/2, f'{st.session_state['semaphore'].qc_flag[i][util[0]]}', size=10, horizontalalignment='center', verticalalignment='center')   
 
             st.pyplot(fig)              
 
@@ -374,7 +372,10 @@ def update_mapping(nsteps):
                     job.map = (job.map[0]-nsteps, job.map[1])   
     # update semaphore status for qc
     for i in range(NUM_QC):
-        st.session_state['semaphore'].qc_flag[i] = [t - nsteps for t in st.session_state['semaphore'].qc_flag[i] if t - nsteps >= 0] 
+        # move to left
+        st.session_state['semaphore'].qc_flag[i][:-nsteps] = st.session_state['semaphore'].qc_flag[i][nsteps:]
+        # fill rightmost with 0
+        st.session_state['semaphore'].qc_flag[i][-nsteps:] = 0
 
 def app_layout():
 
