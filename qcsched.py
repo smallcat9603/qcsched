@@ -95,8 +95,8 @@ def get_id(src, type):
 
 def get_vid(src):
     vid = st.session_state[f"job_manager_{src}"].hpc_count
-    for qc in range(NUM_QC):
-        vid += st.session_state[f"job_manager_{src}"].qc_count[qc]
+    for i in range(NUM_QC):
+        vid += st.session_state[f"job_manager_{src}"].qc_count[i]
     vid = f'{src+1}{vid:05d}'            
     return vid
 
@@ -282,7 +282,45 @@ def sort_key_qc(job):
     qc_num = int(job.type[-1])
     return (qc_num, job.priority)
 
+def qc_util(list_qc_flag):
+    result = []
+    start = list_qc_flag[0]
+
+    for t in range(1, len(list_qc_flag)):
+        if list_qc_flag[t] > list_qc_flag[t-1] + 1:
+            length = list_qc_flag[t-1] - start
+            result.append((start, length))
+            start = list_qc_flag[t]
+
+    if list_qc_flag[-1] > start:
+        result.append((start, list_qc_flag[-1]-start))
+    return result
+
 def plot():
+    for i in range(NUM_QC):
+        if len(st.session_state['semaphore'].qc_flag[i]) > 0:
+            fig, ax = plt.subplots(figsize=(8, 1))
+            ax.set_title(f'QC{i+1}')
+            ax.set_ylim(0, 1)
+            ax.set_xlim(0, SCHED_MAP_TIME)
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Utilization')
+            ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
+            ax.xaxis.set_minor_locator(ticker.MultipleLocator(1))
+            ax.spines['right'].set_color('none')
+            ax.spines['top'].set_color('none')
+
+            # st.write(st.session_state['semaphore'].qc_flag[i])
+
+            fc = color(f'qc{i+1}')
+            utils = qc_util(st.session_state['semaphore'].qc_flag[i])
+            for util in utils:
+                rect = patches.Rectangle((util[0], 0), util[1]+1, 1, edgecolor='black', facecolor=fc)
+                ax.add_patch(rect)
+                ax.text(util[0]+util[1]/2, 1/2, '', size=10, horizontalalignment='center', verticalalignment='center')   
+
+            st.pyplot(fig)              
+
     for src in range(NUM_HPC):
         if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) > 0:
             fig, ax = plt.subplots(figsize=(8, 6))
@@ -335,8 +373,8 @@ def update_mapping(nsteps):
                 else: # start > 0, end > 0
                     job.map = (job.map[0]-nsteps, job.map[1])   
     # update semaphore status for qc
-    for qc in range(NUM_QC):
-        st.session_state['semaphore'].qc_flag[qc] = [t - nsteps for t in st.session_state['semaphore'].qc_flag[qc] if t - nsteps >= 0] 
+    for i in range(NUM_QC):
+        st.session_state['semaphore'].qc_flag[i] = [t - nsteps for t in st.session_state['semaphore'].qc_flag[i] if t - nsteps >= 0] 
 
 def app_layout():
 
