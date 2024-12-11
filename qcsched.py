@@ -26,13 +26,14 @@ class Job:
         self.map = None
         
     def __repr__(self):
-        return f'Job(id={self.id}, type={self.type}, nnodes={self.nnodes}, time={self.time}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map}, src={self.src})'
+        return f'Job(src={self.src}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, time={self.time}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map})'
     
 class Semaphore:
     def __init__(self): # 0: available, 1: occupied
         self.qc_flag = {}
         for i in range(NUM_QC): 
             self.qc_flag[i] = np.zeros(SCHED_MAP_TIME, dtype=int) # t represents (t, t+1) occupation
+
     def __repr__(self):
         return f'qc_flag={self.qc_flag}'  
 
@@ -79,13 +80,16 @@ def init():
             # per hpc
             st.session_state[f'job_manager_{src}'] = JobManager() 
 
+def get_num_from_0(str):
+    return int(str[-1]) - 1
+
 def get_id(src, type):
     if type.startswith('QC'):
-        qc = int(type[-1]) - 1
+        qc = get_num_from_0(type)
         # record qc job count at src hpc
         st.session_state[f"job_manager_{src}"].qc_count[qc] += 1
         # allocate qc job id, ex 191000
-        id = f'{src+1}9{type[-1]}{st.session_state[f"job_manager_{src}"].qc_count[qc]:03d}'            
+        id = f'{src+1}9{qc+1}{st.session_state[f"job_manager_{src}"].qc_count[qc]:03d}'            
     else:
         # record hpc job count at src hpc
         st.session_state[f'job_manager_{src}'].hpc_count += 1 
@@ -101,7 +105,7 @@ def get_vid(src):
     return vid
 
 def submit(hpc, type, nnodes, time, start, priority):
-    src = int(hpc[-1]) - 1  
+    src = get_num_from_0(hpc) 
     id = get_id(src, type)
     vid = get_vid(src)
     # record all jobs at src hpc
@@ -111,7 +115,7 @@ def submit(hpc, type, nnodes, time, start, priority):
 def import_file(uploaded_file):
     df = pd.read_csv(uploaded_file, comment='#', header=None)
     for idx, row in df.iterrows():
-        src = int(row[0][-1]) - 1
+        src = get_num_from_0(row[0])
         type = row[1]
         nnodes = int(row[2])
         time = int(row[3])
@@ -127,7 +131,8 @@ def do_mapping(job, col, row):
     st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = int(job.id)
     # change semaphore status for qc
     if job.type.startswith('QC'):
-        st.session_state['semaphore'].qc_flag[int(job.type[-1])-1][col:col+job.time] = job.vid
+        qc = get_num_from_0(job.type)
+        st.session_state['semaphore'].qc_flag[qc][col:col+job.time] = job.vid
     # change job status   
     if col == 0:
         job.status = 'RUNNING'
@@ -165,11 +170,12 @@ def map(job, algo):
 
             for col in range(job.start, SCHED_MAP_TIME-job.time+1): # x-axis
                 if job.type.startswith('QC'):
-                    if np.any(st.session_state['semaphore'].qc_flag[int(job.type[-1])-1][col:col+job.time] > 0):
+                    qc = get_num_from_0(job.type)
+                    if np.any(st.session_state['semaphore'].qc_flag[qc][col:col+job.time] > 0):
                         continue                    
 
                 for row in range(HPC_NODES-job.nnodes+1): # y-axis
-                    if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0):
+                    if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0): 
                         do_mapping(job, col, row)
                         return True
                     elif job.type.startswith('QC') and algo == "QPriority":
@@ -216,6 +222,7 @@ def schedule(algo):
             st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_sjf)
         elif algo.endswith('Priority'):
             st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_priority)
+
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
             map(job, algo)
 
@@ -280,10 +287,13 @@ def sort_key_priority(job):
     return (type_order, job.priority)
 
 def sort_key_qc(job):
-    qc_num = int(job.type[-1])
-    return (qc_num, job.priority)
+    qc = get_num_from_0(job.type)
+    return (qc, job.priority)
 
-def qc_util(arr_qc_flag):
+def qc_util(arr_qc_flag): 
+    """
+    Provide list of (start, len) according to non-zero elements in qc_flag 
+    """
     result = []
     cur = 0
     for t in range(1, SCHED_MAP_TIME):
@@ -339,7 +349,8 @@ def plot_hpc():
                 if job.status == 'RUNNING' or job.status == 'QUEUED' or job.status == 'REQUEUED':
                     fc = color('hpc')
                     if job.type.startswith('QC'):
-                        fc = color(f'qc{job.type[-1]}')
+                        qc = get_num_from_0(job.type)
+                        fc = color(f'qc{qc+1}')
                 
                     rect = patches.Rectangle(job.map, job.time, job.nnodes, edgecolor='black', facecolor=fc)
                     ax.add_patch(rect)
@@ -359,7 +370,7 @@ def update_mapping(nsteps):
         # fill rightmost with 0
         st.session_state[f'job_manager_{src}'].sched_map[:, -nsteps:] = 0
 
-        # update map location
+        # update job.map
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
             if job.status == 'RUNNING':
                 job.time -= nsteps
@@ -376,6 +387,7 @@ def update_mapping(nsteps):
                     job.time = end
                 else: # start > 0, end > 0
                     job.map = (job.map[0]-nsteps, job.map[1])   
+
     # update semaphore status for qc
     for i in range(NUM_QC):
         # move to left
@@ -430,7 +442,6 @@ def app_layout():
     )
 
     if st.button(label='Schedule'):
-        # schedule(algo)
         schedule_qc(algo)
         st.rerun()
 
@@ -442,6 +453,6 @@ def app_layout():
         st.rerun()
 
     plot()
-      
+    
 if __name__=='__main__':
     app_layout()
