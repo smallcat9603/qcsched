@@ -9,6 +9,7 @@ HPC_NODES = 10
 SCHED_MAP_TIME = 20
 NUM_HPC = 3
 NUM_QC = 2
+STOP_TOLERANCE = 1
 
 class Job:
     def __init__(self, src, id, vid, type, nnodes, time, start, priority):
@@ -164,7 +165,8 @@ def check_mapping(src):
 def map(job, algo):
     if job.status == 'ACCEPT' or job.status == 'STOP' or job.status == 'HOLD':
         if job.start + job.time < SCHED_MAP_TIME + 1:
-            nstop = HPC_NODES-job.nnodes+1
+            qc_start = -1
+            nstop = job.nnodes
             ids = []
             col_row = None 
 
@@ -172,7 +174,9 @@ def map(job, algo):
                 if job.type.startswith('QC'):
                     qc = get_num_from_0(job.type)
                     if np.any(st.session_state['semaphore'].qc_flag[qc][col:col+job.time] > 0):
-                        continue                    
+                        continue     
+                    if qc_start < 0:
+                        qc_start = col # qc job should start at time within (qc_start, qc_start+STOP_TOLERANCE)
 
                 for row in range(HPC_NODES-job.nnodes+1): # y-axis
                     if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0): 
@@ -194,7 +198,7 @@ def map(job, algo):
                             # qc job location to be mapped
                             col_row = (col, row)
 
-                if col == 1 and col_row and job.type.startswith('QC') and algo == 'QPriority': # not stop hpc job if it will finish in short time (1)
+                if qc_start >= 0 and col == min(qc_start+STOP_TOLERANCE, SCHED_MAP_TIME-job.time) and col_row and job.type.startswith('QC') and algo == 'QPriority': # not stop hpc job if it will finish in short time (1)
                     # stop running hpc jobs
                     stop_jobs(job.src, ids)    
                     # map qc job            
@@ -453,6 +457,6 @@ def app_layout():
         st.rerun()
 
     plot()
-    
+
 if __name__=='__main__':
     app_layout()
