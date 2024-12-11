@@ -159,14 +159,15 @@ def check_mapping(src):
 def map(job, algo):
     if job.status == 'ACCEPT' or job.status == 'STOP' or job.status == 'HOLD':
         if job.start + job.time < SCHED_MAP_TIME + 1:
+            nstop = HPC_NODES-job.nnodes+1
+            ids = []
+            col_row = None 
+
             for col in range(job.start, SCHED_MAP_TIME-job.time+1): # x-axis
                 if job.type.startswith('QC'):
                     if np.any(st.session_state['semaphore'].qc_flag[int(job.type[-1])-1][col:col+job.time] > 0):
                         continue                    
 
-                nstop = HPC_NODES-job.nnodes+1
-                ids = []
-                col_row = None 
                 for row in range(HPC_NODES-job.nnodes+1): # y-axis
                     if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0):
                         do_mapping(job, col, row)
@@ -187,7 +188,7 @@ def map(job, algo):
                             # qc job location to be mapped
                             col_row = (col, row)
 
-                if col == 0 and col_row and job.type.startswith('QC') and algo == 'QPriority':
+                if col == 1 and col_row and job.type.startswith('QC') and algo == 'QPriority': # not stop hpc job if it will finish in short time (1)
                     # stop running hpc jobs
                     stop_jobs(job.src, ids)    
                     # map qc job            
