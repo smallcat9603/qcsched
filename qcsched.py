@@ -441,8 +441,12 @@ def app_layout():
 
     st.header('Jobs Scheduled')
 
-    algo = st.segmented_control(
+    col1, col2 = st.columns([1,1])
+    algo = col1.segmented_control(
         'Select Scheduling Algorithm', ['FCFS', 'SJF', 'Priority', 'QPriority'], default='QPriority'
+    )
+    resched = col2.segmented_control(
+        'Allow Re-scheduling after HPC Jobs are Stopped', ['No', 'Yes'], default='No'
     )
 
     if st.button(label='Schedule'):
