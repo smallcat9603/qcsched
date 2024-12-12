@@ -9,7 +9,7 @@ HPC_NODES = 10
 SCHED_MAP_TIME = 20
 NUM_HPC = 3
 NUM_QC = 2
-STOP_TOLERANCE = 1
+SUSPEND_TOLERANCE = 1
 
 class Job:
     def __init__(self, src, id, vid, type, nnodes, time, start, priority):
@@ -138,10 +138,7 @@ def do_mapping(job, col, row):
     if col == 0:
         job.status = 'RUNNING'
     else:
-        if job.status == 'STOP':
-            job.status = 'REQUEUED'
-        else:
-            job.status = 'QUEUED'
+        job.status = 'QUEUED'
     # record map location
     job.map = (col, row)
 
@@ -151,22 +148,30 @@ def release_nodes(job):
     # restore sched map with 0
     st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = 0
 
-def stop_jobs(src, ids):
+def suspend(job):
+    # change job status
+    job.status = 'SUSPEND'
+    # restore sched map with 0
+    release_nodes(job)      
+
+def suspend_jobs(src, ids):
     for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
         if int(job.id) in ids:
-            # change job status
-            job.status = 'STOP'
-            # restore sched map with 0
-            release_nodes(job)  
+            suspend(job) 
 
 def check_mapping(src):
     st.write(st.session_state[f'job_manager_{src}'].sched_map[::-1]) # np.array index align with axis  
 
-def map(job, algo):
-    if job.status == 'ACCEPT' or job.status == 'STOP' or job.status == 'HOLD':
+def resched_jobs(src, qc_start):
+    for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+        if not job.type.startswith('QC') and job.status == 'QUEUED' and job.map[0] > qc_start:
+            suspend(job)    
+
+def map(job, algo, resched):
+    if job.status == 'ACCEPT' or job.status == 'SUSPEND' or job.status == 'HOLD':
         if job.start + job.time < SCHED_MAP_TIME + 1:
             qc_start = -1
-            nstop = job.nnodes
+            nsuspend = job.nnodes
             ids = []
             col_row = None 
 
@@ -176,7 +181,7 @@ def map(job, algo):
                     if np.any(st.session_state['semaphore'].qc_flag[qc][col:col+job.time] > 0):
                         continue     
                     if qc_start < 0:
-                        qc_start = col # qc job should start at time within (qc_start, qc_start+STOP_TOLERANCE)
+                        qc_start = col # qc job should start at time within (qc_start, qc_start+SUSPEND_TOLERANCE)
 
                 for row in range(HPC_NODES-job.nnodes+1): # y-axis
                     if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0): 
@@ -190,20 +195,26 @@ def map(job, algo):
                             if (id//1000)%100 > 90:
                                 include_qc = True
                                 break
-                        if not include_qc and len(unique_occupied) < nstop:
-                            # number of hpc jobs to be stopped
-                            nstop = len(unique_occupied)
-                            # hpc job ids to be stopped
+                        if not include_qc and len(unique_occupied) < nsuspend:
+                            # number of hpc jobs to be suspended
+                            nsuspend = len(unique_occupied)
+                            # hpc job ids to be suspended
                             ids = unique_occupied
                             # qc job location to be mapped
                             col_row = (col, row)
 
-                if qc_start >= 0 and col == min(qc_start+STOP_TOLERANCE, SCHED_MAP_TIME-job.time) and col_row and job.type.startswith('QC') and algo == 'QPriority': # not stop hpc job if it will finish in short time (1)
-                    # stop running hpc jobs
-                    stop_jobs(job.src, ids)    
+                if qc_start >= 0 and col == min(qc_start+SUSPEND_TOLERANCE, SCHED_MAP_TIME-job.time) and col_row and job.type.startswith('QC') and algo == 'QPriority': # not suspend hpc job if it will finish in short time (1)
+                    # suspend running hpc jobs
+                    suspend_jobs(job.src, ids)    
                     # map qc job            
                     do_mapping(job, col_row[0], col_row[1])
+
+                    # reschedule hpc jobs starting after qc_start
+                    if resched == "Yes":
+                        resched_jobs(job.src, qc_start)  
+
                     return True
+                
         # cannot be queued within scheduling period
         job.status = 'HOLD'
     return False
@@ -216,22 +227,8 @@ def color(str):
     }
     return colors[str]
 
-# not consider inter-hpc priority
-def schedule(algo):
-    for src in range(NUM_HPC):
-        st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute, ex jobs can be separately added or removed but job attribute modification will reflect to both
-        if algo == 'FCFS':
-            st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_fcfs)
-        elif algo == 'SJF':
-            st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_sjf)
-        elif algo.endswith('Priority'):
-            st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_priority)
-
-        for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
-            map(job, algo)
-
 # consider inter-hpc priority
-def schedule_qc(algo):
+def schedule(algo, resched):
     qc_scheduled = [] # all qc jobs
     for src in range(NUM_HPC):
         st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute, ex jobs can be separately added or removed but job attribute modification will reflect to both
@@ -250,18 +247,18 @@ def schedule_qc(algo):
 
     qc_scheduled.sort(key=sort_key_qc)
 
-    # schdule qc jobs
+    # first schdule qc jobs
     for qc_job in qc_scheduled:
         for src in range(NUM_HPC):
             for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
                 if qc_job.id == job.id:
-                    map(job, algo)
+                    map(job, algo, resched)
 
-    # schedule hpc jobs
+    # then schedule hpc jobs
     for src in range(NUM_HPC):
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
             if not job.type.startswith('QC'):              
-                map(job, algo)  
+                map(job, algo, resched)  
 
 def show_submitted_jobs():
     for src in range(NUM_HPC):
@@ -350,7 +347,7 @@ def plot_hpc():
 
             for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
                 # st.write(job)
-                if job.status == 'RUNNING' or job.status == 'QUEUED' or job.status == 'REQUEUED':
+                if job.status == 'RUNNING' or job.status == 'QUEUED':
                     fc = color('hpc')
                     if job.type.startswith('QC'):
                         qc = get_num_from_0(job.type)
@@ -380,7 +377,7 @@ def update_mapping(nsteps):
                 job.time -= nsteps
                 if job.time <= 0:
                     job.status = 'FINISH'
-            elif job.status == 'QUEUED' or job.status == 'REQUEUED':
+            elif job.status == 'QUEUED':
                 start = job.map[0] - nsteps
                 end = start + job.time
                 if end <= 0: # start < 0
@@ -446,18 +443,18 @@ def app_layout():
         'Select Scheduling Algorithm', ['FCFS', 'SJF', 'Priority', 'QPriority'], default='QPriority'
     )
     resched = col2.segmented_control(
-        'Allow Re-scheduling after HPC Jobs are Stopped', ['No', 'Yes'], default='No'
+        'Allow Re-scheduling after HPC Jobs are suspended', ['No', 'Yes'], default='Yes'
     )
 
     if st.button(label='Schedule'):
-        schedule_qc(algo)
+        schedule(algo, resched)
         st.rerun()
 
     expander = st.expander('Time Flies')
     nsteps = expander.number_input('Number of Steps Forward', min_value=1, max_value=10, value=1, step=1)
     if expander.button(label='Proceed'):
         update_mapping(nsteps)
-        schedule_qc(algo)
+        schedule(algo, resched)
         st.rerun()
 
     plot()
