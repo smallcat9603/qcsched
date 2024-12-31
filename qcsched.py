@@ -262,18 +262,21 @@ def schedule(algo, resched):
 
 def show_submitted_jobs():
     for src in range(NUM_HPC):
-        st.write(f'HPC{src+1}')
-        df = pd.DataFrame([{
-            'Job ID': job.vid,
-            'Status': job.status,
-            'Type': job.type,
-            'Nodes': job.nnodes,
-            'Elapsed Time': job.time,
-            'Start Time': job.start,
-            'Priority': job.priority,
-            } for job in st.session_state[f'job_manager_{src}'].jobs_submitted]
-        )
-        st.table(df)
+        if len(st.session_state[f'job_manager_{src}'].jobs_submitted) > 0:
+            st.write(f'HPC{src+1}')
+            df = pd.DataFrame([{
+                'Job ID': job.vid,
+                'Status': job.status,
+                'Type': job.type,
+                'Nodes': job.nnodes,
+                'Elapsed Time': job.time,
+                'Start Time': job.start,
+                'Priority': job.priority,
+                } for job in st.session_state[f'job_manager_{src}'].jobs_submitted]
+            )
+            st.table(df)
+        else:
+            st.write(f'No job submitted in HPC{src+1}')
 
 def sort_key_fcfs(job):
     type_order = 0 if job.type.startswith('QC') else 1
@@ -312,7 +315,7 @@ def plot_qc():
         # st.write(st.session_state['semaphore'].qc_flag[i])
         if np.any(st.session_state['semaphore'].qc_flag[i] > 0):
             fig, ax = plt.subplots(figsize=(8, 1))
-            ax.set_title(f'QC{i+1}')
+            # ax.set_title(f'QC{i+1}')
             ax.set_ylim(0, 1)
             ax.set_xlim(0, SCHED_MAP_TIME)
             ax.set_xlabel('Time')
@@ -329,13 +332,14 @@ def plot_qc():
                 ax.add_patch(rect)
                 ax.text(util[0]+util[1]/2, 1/2, f'{st.session_state['semaphore'].qc_flag[i][util[0]]}', size=10, horizontalalignment='center', verticalalignment='center')   
 
-            st.pyplot(fig)  
+            st.write(f'QC{i+1} Utilization')
+            st.pyplot(fig) 
 
 def plot_hpc():
     for src in range(NUM_HPC):
         if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) > 0:
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.set_title(f'HPC{src+1}')
+            fig, ax = plt.subplots(figsize=(8, 4))
+            # ax.set_title(f'HPC{src+1}')
             ax.set_ylim(0, HPC_NODES)
             ax.set_xlim(0, SCHED_MAP_TIME)
             ax.set_xlabel('Time')
@@ -357,6 +361,7 @@ def plot_hpc():
                     ax.add_patch(rect)
                     ax.text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.vid}-{job.priority}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
 
+            st.write(f'HPC{src+1} Utilization')
             st.pyplot(fig)
 
 def plot():
@@ -398,59 +403,57 @@ def update_mapping(nsteps):
 
 def app_layout():
 
-    st.title('QCSched Simulation')
+    st.set_page_config(layout="wide")
 
-    st.divider()
+    st.sidebar.title('QCSched Simulation')
 
-    st.header('Jobs Submitted')
+    ################################## Jobs Submitted ##################################
 
-    col1, col2 = st.columns([1,1])
-    hpc = col1.segmented_control(
+    hpc = st.sidebar.segmented_control(
         'HPC Selection', ['HPC1', 'HPC2', 'HPC3'], default='HPC1'
     )
-    type = col2.segmented_control(
+    type = st.sidebar.segmented_control(
         'Job Type', ['HPC Only', 'QC1', 'QC2'], default='HPC Only'
     )
 
-    col1, col2, col3, col4 = st.columns([1,1,1,1])
+    col1, col2, col3, col4 = st.sidebar.columns([1,1,1,1])
     nnodes = col1.number_input('HPC Nodes', min_value=1, max_value=96, value=1, step=1)
     time = col2.number_input('Elapsed Time', min_value=1, max_value=60, value=5, step=1)
     start = col3.number_input('Start Time', min_value=0, max_value=120, value=0, step=1)
-    priority = col4.number_input('Priority', min_value=1, max_value=20, value=1, step=1)
+    priority = col4.number_input('Job Priority', min_value=1, max_value=20, value=1, step=1)
 
     init()
 
-    if st.button(label='Submit'):
+    col1, col2 = st.sidebar.columns([1,1])
+    if col1.button(label='Submit', type='primary'):
         submit(hpc, type, nnodes, time, start, priority)
+    if col2.button(label='Clear'):
+        st.cache_data.clear() # clear cache data via @st.cache_data, not including st.session_state
+        for key in st.session_state.keys():
+            del st.session_state[key] 
+        st.rerun()
 
-    expander = st.expander('Import')
+    expander = st.sidebar.expander('Import')
     uploaded_file = expander.file_uploader("Choose a file")
     if uploaded_file is not None:
         import_file(uploaded_file)
         
     show_submitted_jobs()
 
-    if st.button(label='Clear'):
-        st.cache_data.clear() # clear cache data via @st.cache_data, not including st.session_state
-        for key in st.session_state.keys():
-            del st.session_state[key] 
-        st.rerun()
+    ################################## Jobs Scheduled ##################################
 
-    st.header('Jobs Scheduled')
-
-    col1, col2 = st.columns([1,1])
-    algo = col1.segmented_control(
+    algo = st.sidebar.segmented_control(
         'Select Scheduling Algorithm', ['FCFS', 'SJF', 'Priority', 'QPriority'], default='QPriority'
     )
-    resched = col2.segmented_control(
+    resched = st.sidebar.segmented_control(
         'Allow Re-scheduling after HPC Jobs are suspended', ['No', 'Yes'], default='Yes'
     )
 
-    if st.button(label='Schedule'):
+    if st.sidebar.button(label='Schedule', type='primary'):
         schedule(algo, resched)
         st.rerun()
 
-    expander = st.expander('Time Flies')
+    expander = st.sidebar.expander('Time Flies')
     nsteps = expander.number_input('Number of Steps Forward', min_value=1, max_value=10, value=1, step=1)
     if expander.button(label='Proceed'):
         update_mapping(nsteps)
