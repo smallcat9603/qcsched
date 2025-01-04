@@ -261,9 +261,12 @@ def schedule(algo, resched):
                 map(job, algo, resched)  
 
 def show_submitted_jobs():
+    st.header('Jobs Submitted')
+
+    tabs = st.tabs([f'HPC{src+1}' for src in range(NUM_HPC)])
+
     for src in range(NUM_HPC):
         if len(st.session_state[f'job_manager_{src}'].jobs_submitted) > 0:
-            st.write(f'HPC{src+1}')
             df = pd.DataFrame([{
                 'Job ID': job.vid,
                 'Status': job.status,
@@ -274,9 +277,9 @@ def show_submitted_jobs():
                 'Priority': job.priority,
                 } for job in st.session_state[f'job_manager_{src}'].jobs_submitted]
             )
-            st.table(df)
+            tabs[src].table(df)
         else:
-            st.write(f'No job submitted in HPC{src+1}')
+            tabs[src].info(f'No job submitted in HPC{src+1}')
 
 def sort_key_fcfs(job):
     type_order = 0 if job.type.startswith('QC') else 1
@@ -332,7 +335,7 @@ def plot_qc():
                 ax.add_patch(rect)
                 ax.text(util[0]+util[1]/2, 1/2, f'{st.session_state['semaphore'].qc_flag[i][util[0]]}', size=10, horizontalalignment='center', verticalalignment='center')   
 
-            st.write(f'QC{i+1} Utilization')
+            st.header(f'QC{i+1} Schedule')
             st.pyplot(fig) 
 
 def plot_hpc():
@@ -361,7 +364,7 @@ def plot_hpc():
                     ax.add_patch(rect)
                     ax.text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.vid}-{job.priority}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
 
-            st.write(f'HPC{src+1} Utilization')
+            st.header(f'HPC{src+1} Schedule')
             st.pyplot(fig)
 
 def plot():
