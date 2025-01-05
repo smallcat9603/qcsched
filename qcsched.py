@@ -73,6 +73,72 @@ class JobManager:
 #     df=pd.DataFrame({"Process":process,'Arrival Time':start,"Burst Time":burst,'Completion Time':finish,'Turn Around Time':turn_around,'Waiting Time':wait}).sort_values(by ='Process')
 #     return df
 
+def wait_time(scheduled, scheduled_qc):
+    wtime = 0.0
+    wtime_qc = 0.0
+
+    for src in range(NUM_HPC):
+        for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+            if job.status == 'QUEUED':
+                wtime += job.map[0]
+                if job.type.startswith('QC'):
+                    wtime_qc += job.map[0]
+
+    avg_wtime = 'na'
+    avg_wtime_qc = 'na'
+    if scheduled > 0:
+        avg_wtime = str(wtime/scheduled)
+    if scheduled_qc > 0:
+        avg_wtime_qc = str(wtime_qc/scheduled_qc)
+
+    return avg_wtime, avg_wtime_qc
+
+def show_statistics():
+    total = 0
+    running = 0
+    queued = 0
+    hold = 0
+    finish = 0
+
+    total_qc = 0
+    running_qc = 0
+    queued_qc = 0
+    hold_qc = 0
+    finish_qc = 0
+
+    for src in range(NUM_HPC):
+        total += len(st.session_state[f'job_manager_{src}'].jobs_submitted)
+        for job in st.session_state[f'job_manager_{src}'].jobs_submitted:
+            if job.type.startswith('QC'):
+                total_qc += 1
+            if job.status == 'RUNNING':
+                running += 1
+                if job.type.startswith('QC'):
+                    running_qc += 1
+            elif job.status == 'QUEUED':
+                queued += 1
+                if job.type.startswith('QC'):
+                    queued_qc += 1
+            elif job.status == 'HOLD':
+                hold += 1
+                if job.type.startswith('QC'):
+                    hold_qc += 1
+            elif job.status == 'FINISH':
+                finish += 1
+                if job.type.startswith('QC'):
+                    finish_qc += 1
+
+    avg_wtime, avg_wtime_qc = wait_time(running+queued, running_qc+queued_qc)
+
+    st.header('Statistics')
+    cols = st.columns(6)
+    cols[0].metric('Total', f'{total_qc}/{total}')
+    cols[1].metric('Running', f'{running_qc}/{running}')
+    cols[2].metric('Queued', f'{queued_qc}/{queued}')
+    cols[3].metric('Hold', f'{hold_qc}/{hold}')
+    cols[4].metric('Finish', f'{finish_qc}/{finish}')
+    cols[5].metric('Wait', f'{avg_wtime_qc}/{avg_wtime}')
+
 def init():
     if 'semaphore' not in st.session_state:
         # co-scheduler
@@ -462,6 +528,8 @@ def app_layout():
         update_mapping(nsteps)
         schedule(algo, resched)
         st.rerun()
+
+    show_statistics()
 
     plot()
 
