@@ -48,31 +48,6 @@ class JobManager:
         self.jobs_scheduled = []
         self.sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME), dtype=int) # (n, t) represents (t, t+1) occupation at n-th node
 
-# def turn_around_time(arrival,finish):
-#     """
-#     Provide arrival time and finish time as array inputs returns 
-#     """
-#     turn_around_time=[]
-#     for x in range(len(arrival)):
-#         turn_around_time.append(finish[x]-arrival[x])
-#     return turn_around_time
-
-# def wait_time(turn_around,burst):
-#     """
-#     provide array input and will produce array as output
-#     """
-#     wait=[]
-#     for x in range(len(burst)):
-#         wait.append(turn_around[x]-burst[x])
-#     return wait
-
-# def make_dataframe(process,start,burst,finish,turn_around,wait):
-#     """
-#     provide the arrays for all attributes and converted dataframe will be returned
-#     """
-#     df=pd.DataFrame({"Process":process,'Arrival Time':start,"Burst Time":burst,'Completion Time':finish,'Turn Around Time':turn_around,'Waiting Time':wait}).sort_values(by ='Process')
-#     return df
-
 def wait_time(scheduled, scheduled_qc):
     wtime = 0.0
     wtime_qc = 0.0
@@ -130,7 +105,7 @@ def show_statistics():
 
     avg_wtime, avg_wtime_qc = wait_time(running+queued, running_qc+queued_qc)
 
-    st.header('Statistics')
+    st.header('Statistics (QC)')
     cols = st.columns(6)
     cols[0].metric('Total', f'{total} ({total_qc})')
     cols[1].metric('Running', f'{running} ({running_qc})')
