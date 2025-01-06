@@ -132,12 +132,12 @@ def show_statistics():
 
     st.header('Statistics')
     cols = st.columns(6)
-    cols[0].metric('Total', f'{total_qc}/{total}')
-    cols[1].metric('Running', f'{running_qc}/{running}')
-    cols[2].metric('Queued', f'{queued_qc}/{queued}')
-    cols[3].metric('Hold', f'{hold_qc}/{hold}')
-    cols[4].metric('Finish', f'{finish_qc}/{finish}')
-    cols[5].metric('Wait', f'{avg_wtime_qc}/{avg_wtime}')
+    cols[0].metric('Total', f'{total} ({total_qc})')
+    cols[1].metric('Running', f'{running} ({running_qc})')
+    cols[2].metric('Queued', f'{queued} ({queued_qc})')
+    cols[3].metric('Hold', f'{hold} ({hold_qc})')
+    cols[4].metric('Finish', f'{finish} ({finish_qc})')
+    cols[5].metric('Wait', f'{avg_wtime} ({avg_wtime_qc})')
 
 def init():
     if 'semaphore' not in st.session_state:
