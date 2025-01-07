@@ -168,6 +168,23 @@ def import_file(uploaded_file):
         # record all jobs at src hpc
         st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
 
+def delete_job(vid):
+    if not vid.isdigit():
+        return False
+    src = get_num_from_0(vid[0])
+    for job in st.session_state[f'job_manager_{src}'].jobs_submitted:
+        if job.vid == vid:
+            if job.status == 'ACCEPT' or job.status == 'HOLD' or job.status == 'QUEUED':
+                if job.status == 'QUEUED':
+                    release_nodes(job)
+                    if job.type.startswith('QC'):
+                        release_semaphor(job)
+                job.status = 'SUSPEND' # reflected in st.session_state[f'job_manager_{src}'].jobs_scheduled
+                st.session_state[f'job_manager_{src}'].jobs_submitted.remove(job)
+                return True
+            break
+    return False
+
 def do_mapping(job, col, row):
     # fill in sched map with job id
     st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = int(job.id)
@@ -189,13 +206,20 @@ def release_nodes(job):
     # restore sched map with 0
     st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = 0
 
+def release_semaphor(job):
+    qc = get_num_from_0(job.type)
+    st.session_state['semaphore'].qc_flag[qc][job.map[0]:job.map[0]+job.time] = 0
+
 def suspend(job):
     # change job status
     job.status = 'SUSPEND'
     # restore sched map with 0
-    release_nodes(job)      
+    release_nodes(job) 
 
-def suspend_jobs(src, ids):
+    if job.type.startswith('QC'):
+        release_semaphor(job)
+
+def suspend_hpc_jobs(src, ids):
     for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
         if int(job.id) in ids:
             suspend(job) 
@@ -203,10 +227,10 @@ def suspend_jobs(src, ids):
 def check_mapping(src):
     st.write(st.session_state[f'job_manager_{src}'].sched_map[::-1]) # np.array index align with axis  
 
-def resched_jobs(src, qc_start):
+def resched_jobs(src, start):
     for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
-        if not job.type.startswith('QC') and job.status == 'QUEUED' and job.map[0] > qc_start:
-            suspend(job)    
+        if job.status == 'QUEUED' and job.map[0] > start:
+            suspend(job)  
 
 def map(job, algo, resched):
     if job.status == 'ACCEPT' or job.status == 'SUSPEND' or job.status == 'HOLD':
@@ -246,13 +270,13 @@ def map(job, algo, resched):
 
                 if qc_start >= 0 and col == min(qc_start+SUSPEND_TOLERANCE, SCHED_MAP_TIME-job.time) and col_row and job.type.startswith('QC') and algo == 'QPriority': # not suspend hpc job if it will finish in short time (1)
                     # suspend running hpc jobs
-                    suspend_jobs(job.src, ids)    
+                    suspend_hpc_jobs(job.src, ids)    
                     # map qc job            
                     do_mapping(job, col_row[0], col_row[1])
 
-                    # reschedule hpc jobs starting after qc_start
-                    if resched == "Yes":
-                        resched_jobs(job.src, qc_start)  
+                    # reschedule jobs starting after col_row[0]
+                    if resched == "Yes":  
+                        resched_jobs(job.src, col_row[0])
 
                     return True
                 
@@ -270,9 +294,19 @@ def color(str):
 
 # consider inter-hpc priority
 def schedule(algo, resched):
-    qc_scheduled = [] # all qc jobs
+    qc_sched = [] # all qc jobs
     for src in range(NUM_HPC):
+        # check if jobs deleted
+        submitted_vids = [job.vid for job in st.session_state[f'job_manager_{src}'].jobs_submitted]
+        starts = []
+        for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+            if job.vid not in submitted_vids: 
+                starts.append(job.map[0])
+        
         st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute, ex jobs can be separately added or removed but job attribute modification will reflect to both
+        if len(starts) > 0:
+            resched_jobs(src, min(starts))
+
         if algo == 'FCFS':
             st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_fcfs)
         elif algo == 'SJF':
@@ -282,14 +316,14 @@ def schedule(algo, resched):
         
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
             if job.type.startswith('QC'):
-                qc_scheduled.append(job)
+                qc_sched.append(job)
             else:
                 break
 
-    qc_scheduled.sort(key=sort_key_qc)
+    qc_sched.sort(key=sort_key_qc)
 
     # first schdule qc jobs
-    for qc_job in qc_scheduled:
+    for qc_job in qc_sched:
         for src in range(NUM_HPC):
             for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
                 if qc_job.id == job.id:
@@ -461,7 +495,7 @@ def app_layout():
     )
 
     col1, col2, col3, col4 = st.sidebar.columns([1,1,1,1])
-    nnodes = col1.number_input('HPC Nodes', min_value=1, max_value=96, value=1, step=1)
+    nnodes = col1.number_input('HPC Nodes', min_value=1, max_value=96, value=5, step=1)
     time = col2.number_input('Elapsed Time', min_value=1, max_value=60, value=5, step=1)
     start = col3.number_input('Start Time', min_value=0, max_value=120, value=0, step=1)
     priority = col4.number_input('Job Priority', min_value=1, max_value=20, value=1, step=1)
@@ -481,6 +515,14 @@ def app_layout():
     uploaded_file = expander.file_uploader("Choose a file")
     if uploaded_file is not None:
         import_file(uploaded_file)
+
+    expander = st.sidebar.expander('Delete')
+    vid = expander.text_input('Job ID', placeholder='100001')
+    if expander.button(label='Delete'):
+        if delete_job(vid):
+            expander.success(f'Job {vid} deleted!')
+        else:
+            expander.error(f'Job {vid} deletion failed!')
         
     show_submitted_jobs()
 
