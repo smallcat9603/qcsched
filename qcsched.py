@@ -62,9 +62,9 @@ def wait_time(scheduled, scheduled_qc):
     avg_wtime = 'na'
     avg_wtime_qc = 'na'
     if scheduled > 0:
-        avg_wtime = str(wtime/scheduled)
+        avg_wtime = str(round(wtime/scheduled, 1))
     if scheduled_qc > 0:
-        avg_wtime_qc = str(wtime_qc/scheduled_qc)
+        avg_wtime_qc = str(round(wtime_qc/scheduled_qc, 1))
 
     return avg_wtime, avg_wtime_qc
 
