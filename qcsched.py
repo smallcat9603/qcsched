@@ -180,7 +180,7 @@ def delete_job(vid):
                     if job.type.startswith('QC'):
                         release_semaphor(job)
                 job.status = 'SUSPEND' # reflected in st.session_state[f'job_manager_{src}'].jobs_scheduled
-                st.session_state[f'job_manager_{src}'].jobs_submitted.remove(job)
+                st.session_state[f'job_manager_{src}'].jobs_submitted.remove(job) # retained in st.session_state[f'job_manager_{src}'].jobs_scheduled
                 return True
             break
     return False
@@ -292,20 +292,37 @@ def color(str):
     }
     return colors[str]
 
+def resched_start(src):
+    scheduled_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_scheduled}
+    if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) > 0:
+        return -1
+    submitted_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_submitted}
+    added = submitted_vids - scheduled_vids
+    if added:
+        return 0
+    deleted = scheduled_vids - submitted_vids
+    if deleted:
+        cols = []
+        for vid in deleted:
+            for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+                if vid == job.vid:
+                    if job.status == 'SUSPEND':
+                        cols.append(job.map[0])
+                    break
+        if len(cols) > 0:
+            return min(cols)
+    return -1
+
 # consider inter-hpc priority
 def schedule(algo, resched):
     qc_sched = [] # all qc jobs
     for src in range(NUM_HPC):
-        # check if jobs deleted
-        submitted_vids = [job.vid for job in st.session_state[f'job_manager_{src}'].jobs_submitted]
-        starts = []
-        for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
-            if job.vid not in submitted_vids: 
-                starts.append(job.map[0])
-        
+        start = -1
+        if resched == 'Yes':
+            start = resched_start(src)
         st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute, ex jobs can be separately added or removed but job attribute modification will reflect to both
-        if len(starts) > 0:
-            resched_jobs(src, min(starts))
+        if start >= 0:
+            resched_jobs(src, start) # suspend job, release nodes, release semaphor (qc job)
 
         if algo == 'FCFS':
             st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_fcfs)
@@ -321,6 +338,8 @@ def schedule(algo, resched):
                 break
 
     qc_sched.sort(key=sort_key_qc)
+
+    ############ mapping begins ############
 
     # first schdule qc jobs
     for qc_job in qc_sched:
