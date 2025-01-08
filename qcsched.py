@@ -249,30 +249,32 @@ def check_mapping(src):
     st.write(st.session_state[f'job_manager_{src}'].sched_map[::-1]) # np.array index align with axis  
 
 
-def resched_start(src):
-    if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) == 0:
+def resched_start():
+    cols = []
+    for src in range(NUM_HPC):
+        if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) == 0:
+            continue
+        
+        scheduled_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_scheduled}
+        submitted_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_submitted}
+
+        added = submitted_vids - scheduled_vids
+        if added:
+            return 0
+        
+        deleted = scheduled_vids - submitted_vids
+        if deleted:
+            for vid in deleted:
+                for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+                    if vid == job.vid:
+                        if job.status == 'SUSPEND':
+                            cols.append(job.map[0])
+                        break
+
+    if len(cols) > 0:
+        return min(cols)
+    else:
         return -1
-    
-    scheduled_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_scheduled}
-    submitted_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_submitted}
-
-    added = submitted_vids - scheduled_vids
-    if added:
-        return 0
-    
-    deleted = scheduled_vids - submitted_vids
-    if deleted:
-        cols = []
-        for vid in deleted:
-            for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
-                if vid == job.vid:
-                    if job.status == 'SUSPEND':
-                        cols.append(job.map[0])
-                    break
-        if len(cols) > 0:
-            return min(cols)
-
-    return -1
     
 
 def resched_jobs(src, start):
@@ -342,11 +344,12 @@ def color(str):
 # consider inter-hpc priority
 def schedule(algo, resched):
     qc_sched = [] # all qc jobs
-    for src in range(NUM_HPC):
-        start = -1 # reschedule starting point, -1 if not needed, 0 if needed for all queued jobs
-        if resched == 'Yes':
-            start = resched_start(src)
 
+    start = -1 # reschedule starting point, -1 if not needed, 0 if needed for all queued jobs
+    if resched == 'Yes':
+        start = resched_start()
+
+    for src in range(NUM_HPC):
         st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute, ex jobs can be separately added or removed but job attribute modification will reflect to both
         if start >= 0:
             resched_jobs(src, start) # suspend job, release nodes, release semaphor (qc job)

@@ -1,0 +1,14 @@
+# HPC Selection, Job Type, HPC Nodes, Elapsed Time, Start Time, Priority
+HPC1,HPC,4,5,0,2 
+HPC1,QC1,5,4,0,3
+HPC1,QC1,6,5,0,3
+HPC1,HPC,5,7,0,1
+HPC1,HPC,6,3,0,2
+HPC1,HPC,3,9,0,3
+HPC1,QC1,4,6,0,1
+HPC2,HPC,5,8,0,2 
+HPC2,QC1,6,5,0,2
+HPC2,HPC,4,5,0,1
+HPC2,HPC,3,5,0,3
+HPC2,HPC,4,9,0,2
+HPC2,HPC,5,6,0,1
