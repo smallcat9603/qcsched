@@ -5,11 +5,13 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import matplotlib.patches as patches
 
+
 HPC_NODES = 10
 SCHED_MAP_TIME = 20
 NUM_HPC = 3
 NUM_QC = 2
 SUSPEND_TOLERANCE = 1
+
 
 class Job:
     def __init__(self, src, id, vid, type, nnodes, time, start, priority):
@@ -29,6 +31,7 @@ class Job:
     def __repr__(self):
         return f'Job(src={self.src}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, time={self.time}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map})'
     
+
 class Semaphore:
     def __init__(self): # 0: available, 1: occupied
         self.qc_flag = {}
@@ -37,6 +40,7 @@ class Semaphore:
 
     def __repr__(self):
         return f'qc_flag={self.qc_flag}'  
+
 
 class JobManager:  
     def __init__(self):
@@ -47,6 +51,7 @@ class JobManager:
         self.jobs_submitted = []
         self.jobs_scheduled = []
         self.sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME), dtype=int) # (n, t) represents (t, t+1) occupation at n-th node
+
 
 def wait_time(scheduled, scheduled_qc):
     wtime = 0.0
@@ -67,6 +72,7 @@ def wait_time(scheduled, scheduled_qc):
         avg_wtime_qc = str(round(wtime_qc/scheduled_qc, 1))
 
     return avg_wtime, avg_wtime_qc
+
 
 def show_statistics():
     total = 0
@@ -114,6 +120,7 @@ def show_statistics():
     cols[4].metric('Finish', f'{finish} ({finish_qc})')
     cols[5].metric('Wait', f'{avg_wtime} ({avg_wtime_qc})')
 
+
 def init():
     if 'semaphore' not in st.session_state:
         # co-scheduler
@@ -122,8 +129,10 @@ def init():
             # per hpc
             st.session_state[f'job_manager_{src}'] = JobManager() 
 
+
 def get_num_from_0(str):
     return int(str[-1]) - 1
+
 
 def get_id(src, type):
     if type.startswith('QC'):
@@ -139,6 +148,7 @@ def get_id(src, type):
         id = f'{src+1}{st.session_state[f"job_manager_{src}"].hpc_count:05d}' 
     return id
 
+
 def get_vid(src):
     vid = st.session_state[f"job_manager_{src}"].hpc_count
     for i in range(NUM_QC):
@@ -146,12 +156,14 @@ def get_vid(src):
     vid = f'{src+1}{vid:05d}'            
     return vid
 
+
 def submit(hpc, type, nnodes, time, start, priority):
     src = get_num_from_0(hpc) 
     id = get_id(src, type)
     vid = get_vid(src)
     # record all jobs at src hpc
     st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
+
 
 @st.cache_data
 def import_file(uploaded_file):
@@ -167,6 +179,7 @@ def import_file(uploaded_file):
         vid = get_vid(src)
         # record all jobs at src hpc
         st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
+
 
 def delete_job(vid):
     if not vid.isdigit():
@@ -185,6 +198,7 @@ def delete_job(vid):
             break
     return False
 
+
 def do_mapping(job, col, row):
     # fill in sched map with job id
     st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = int(job.id)
@@ -200,15 +214,18 @@ def do_mapping(job, col, row):
     # record map location
     job.map = (col, row)
 
+
 def release_nodes(job):
     col = job.map[0]
     row = job.map[1]
     # restore sched map with 0
     st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = 0
 
+
 def release_semaphor(job):
     qc = get_num_from_0(job.type)
     st.session_state['semaphore'].qc_flag[qc][job.map[0]:job.map[0]+job.time] = 0
+
 
 def suspend(job):
     # change job status
@@ -219,20 +236,50 @@ def suspend(job):
     if job.type.startswith('QC'):
         release_semaphor(job)
 
+
 def suspend_hpc_jobs(src, ids):
     for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
         if int(job.id) in ids:
             suspend(job) 
 
+
 def check_mapping(src):
     st.write(st.session_state[f'job_manager_{src}'].sched_map[::-1]) # np.array index align with axis  
+
+
+def resched_start(src):
+    if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) == 0:
+        return -1
+    
+    scheduled_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_scheduled}
+    submitted_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_submitted}
+
+    added = submitted_vids - scheduled_vids
+    if added:
+        return 0
+    
+    deleted = scheduled_vids - submitted_vids
+    if deleted:
+        cols = []
+        for vid in deleted:
+            for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+                if vid == job.vid:
+                    if job.status == 'SUSPEND':
+                        cols.append(job.map[0])
+                    break
+        if len(cols) > 0:
+            return min(cols)
+
+    return -1
+    
 
 def resched_jobs(src, start):
     for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
         if job.status == 'QUEUED' and job.map[0] > start:
             suspend(job)  
 
-def map(job, algo, resched):
+
+def map(job, algo):
     if job.status == 'ACCEPT' or job.status == 'SUSPEND' or job.status == 'HOLD':
         if job.start + job.time < SCHED_MAP_TIME + 1:
             qc_start = -1
@@ -274,15 +321,12 @@ def map(job, algo, resched):
                     # map qc job            
                     do_mapping(job, col_row[0], col_row[1])
 
-                    # reschedule jobs starting after col_row[0]
-                    if resched == "Yes":  
-                        resched_jobs(job.src, col_row[0])
-
                     return True
                 
         # cannot be queued within scheduling period
         job.status = 'HOLD'
     return False
+
 
 def color(str):
     colors = {
@@ -292,34 +336,15 @@ def color(str):
     }
     return colors[str]
 
-def resched_start(src):
-    scheduled_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_scheduled}
-    if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) > 0:
-        return -1
-    submitted_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_submitted}
-    added = submitted_vids - scheduled_vids
-    if added:
-        return 0
-    deleted = scheduled_vids - submitted_vids
-    if deleted:
-        cols = []
-        for vid in deleted:
-            for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
-                if vid == job.vid:
-                    if job.status == 'SUSPEND':
-                        cols.append(job.map[0])
-                    break
-        if len(cols) > 0:
-            return min(cols)
-    return -1
 
 # consider inter-hpc priority
 def schedule(algo, resched):
     qc_sched = [] # all qc jobs
     for src in range(NUM_HPC):
-        start = -1
+        start = -1 # reschedule starting point, -1 if not needed, 0 if needed for all queued jobs
         if resched == 'Yes':
             start = resched_start(src)
+
         st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute, ex jobs can be separately added or removed but job attribute modification will reflect to both
         if start >= 0:
             resched_jobs(src, start) # suspend job, release nodes, release semaphor (qc job)
@@ -346,13 +371,14 @@ def schedule(algo, resched):
         for src in range(NUM_HPC):
             for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
                 if qc_job.id == job.id:
-                    map(job, algo, resched)
+                    map(job, algo)
 
     # then schedule hpc jobs
     for src in range(NUM_HPC):
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
             if not job.type.startswith('QC'):              
-                map(job, algo, resched)  
+                map(job, algo)  
+
 
 def show_submitted_jobs():
     st.header('Jobs Submitted')
@@ -375,21 +401,26 @@ def show_submitted_jobs():
         else:
             tabs[src].info(f'No job submitted in HPC{src+1}')
 
+
 def sort_key_fcfs(job):
     type_order = 0 if job.type.startswith('QC') else 1
     return type_order
+
 
 def sort_key_sjf(job):
     type_order = 0 if job.type.startswith('QC') else 1
     return (type_order, job.nnodes*job.time)
 
+
 def sort_key_priority(job):
     type_order = 0 if job.type.startswith('QC') else 1
     return (type_order, job.priority)
 
+
 def sort_key_qc(job):
     qc = get_num_from_0(job.type)
     return (qc, job.priority)
+
 
 def qc_util(arr_qc_flag): 
     """
@@ -406,6 +437,7 @@ def qc_util(arr_qc_flag):
         if t == SCHED_MAP_TIME - 1 and arr_qc_flag[t] > 0:
             result.append((cur, t-cur+1))
     return result
+
 
 def plot_qc():
     for i in range(NUM_QC):
@@ -431,6 +463,7 @@ def plot_qc():
 
             st.header(f'QC{i+1} Schedule')
             st.pyplot(fig) 
+
 
 def plot_hpc():
     for src in range(NUM_HPC):
@@ -461,9 +494,11 @@ def plot_hpc():
             st.header(f'HPC{src+1} Schedule')
             st.pyplot(fig)
 
+
 def plot():
     plot_qc()
     plot_hpc()
+
 
 def update_mapping(nsteps):
     # update sched map
@@ -497,6 +532,7 @@ def update_mapping(nsteps):
         st.session_state['semaphore'].qc_flag[i][:-nsteps] = st.session_state['semaphore'].qc_flag[i][nsteps:]
         # fill rightmost with 0
         st.session_state['semaphore'].qc_flag[i][-nsteps:] = 0
+
 
 def app_layout():
 
@@ -568,6 +604,7 @@ def app_layout():
     show_statistics()
 
     plot()
+
 
 if __name__=='__main__':
     app_layout()
