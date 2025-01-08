@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import matplotlib.patches as patches
+import time
 
 
 HPC_NODES = 10
@@ -14,22 +15,23 @@ SUSPEND_TOLERANCE = 1
 
 
 class Job:
-    def __init__(self, src, id, vid, type, nnodes, time, start, priority):
+    def __init__(self, src, id, vid, type, nnodes, elapsed, start, priority):
         self.src = src
         self.id = id # for node mapping use, can identify qc job or not
         self.vid = vid # for display, cannot identify qc job or not
         self.type = type
         self.nnodes = nnodes
-        self.time = time 
+        self.elapsed = elapsed 
         self.start = start
         self.priority = priority
         self.rstart = 0
         self.end = 0
         self.status = 'ACCEPT'
         self.map = None
+        self.timestamp = time.time()
         
     def __repr__(self):
-        return f'Job(src={self.src}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, time={self.time}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map})'
+        return f'Job(src={self.src}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, elapsed={self.elapsed}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map})'
     
 
 class Semaphore:
@@ -157,12 +159,12 @@ def get_vid(src):
     return vid
 
 
-def submit(hpc, type, nnodes, time, start, priority):
+def submit(hpc, type, nnodes, elapsed, start, priority):
     src = get_num_from_0(hpc) 
     id = get_id(src, type)
     vid = get_vid(src)
     # record all jobs at src hpc
-    st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
+    st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, elapsed=elapsed, start=start, priority=priority))
 
 
 @st.cache_data
@@ -172,13 +174,13 @@ def import_file(uploaded_file):
         src = get_num_from_0(row[0])
         type = row[1]
         nnodes = int(row[2])
-        time = int(row[3])
+        elapsed = int(row[3])
         start = int(row[4])
         priority = int(row[5]) 
         id = get_id(src, type)
         vid = get_vid(src)
         # record all jobs at src hpc
-        st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, time=time, start=start, priority=priority))
+        st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, elapsed=elapsed, start=start, priority=priority))
 
 
 def delete_job(vid):
@@ -201,11 +203,11 @@ def delete_job(vid):
 
 def do_mapping(job, col, row):
     # fill in sched map with job id
-    st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = int(job.id)
+    st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.elapsed)] = int(job.id)
     # change semaphore status for qc
     if job.type.startswith('QC'):
         qc = get_num_from_0(job.type)
-        st.session_state['semaphore'].qc_flag[qc][col:col+job.time] = job.vid
+        st.session_state['semaphore'].qc_flag[qc][col:col+job.elapsed] = job.vid
     # change job status   
     if col == 0:
         job.status = 'RUNNING'
@@ -219,12 +221,12 @@ def release_nodes(job):
     col = job.map[0]
     row = job.map[1]
     # restore sched map with 0
-    st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] = 0
+    st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.elapsed)] = 0
 
 
 def release_semaphor(job):
     qc = get_num_from_0(job.type)
-    st.session_state['semaphore'].qc_flag[qc][job.map[0]:job.map[0]+job.time] = 0
+    st.session_state['semaphore'].qc_flag[qc][job.map[0]:job.map[0]+job.elapsed] = 0
 
 
 def suspend(job):
@@ -281,27 +283,27 @@ def resched_jobs(src, start):
 
 def map(job, algo):
     if job.status == 'ACCEPT' or job.status == 'SUSPEND' or job.status == 'HOLD':
-        if job.start + job.time < SCHED_MAP_TIME + 1:
+        if job.start + job.elapsed < SCHED_MAP_TIME + 1:
             qc_start = -1
             nsuspend = job.nnodes
             ids = []
             col_row = None 
 
-            for col in range(job.start, SCHED_MAP_TIME-job.time+1): # x-axis
+            for col in range(job.start, SCHED_MAP_TIME-job.elapsed+1): # x-axis
                 if job.type.startswith('QC'):
                     qc = get_num_from_0(job.type)
-                    if np.any(st.session_state['semaphore'].qc_flag[qc][col:col+job.time] > 0):
+                    if np.any(st.session_state['semaphore'].qc_flag[qc][col:col+job.elapsed] > 0):
                         continue     
                     if qc_start < 0:
                         qc_start = col # qc job should start at time within (qc_start, qc_start+SUSPEND_TOLERANCE)
 
                 for row in range(HPC_NODES-job.nnodes+1): # y-axis
-                    if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)] == 0): 
+                    if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.elapsed)] == 0): 
                         do_mapping(job, col, row)
                         return True
                     elif job.type.startswith('QC') and algo == "QPriority":
                         include_qc = False
-                        m = st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.time)]
+                        m = st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.elapsed)]
                         unique_occupied = list(np.unique(m[m>0]))
                         for id in unique_occupied:
                             if (id//1000)%100 > 90:
@@ -315,7 +317,7 @@ def map(job, algo):
                             # qc job location to be mapped
                             col_row = (col, row)
 
-                if qc_start >= 0 and col == min(qc_start+SUSPEND_TOLERANCE, SCHED_MAP_TIME-job.time) and col_row and job.type.startswith('QC') and algo == 'QPriority': # not suspend hpc job if it will finish in short time (1)
+                if qc_start >= 0 and col == min(qc_start+SUSPEND_TOLERANCE, SCHED_MAP_TIME-job.elapsed) and col_row and job.type.startswith('QC') and algo == 'QPriority': # not suspend hpc job if it will finish in short time (1)
                     # suspend running hpc jobs
                     suspend_hpc_jobs(job.src, ids)    
                     # map qc job            
@@ -392,7 +394,7 @@ def show_submitted_jobs():
                 'Status': job.status,
                 'Type': job.type,
                 'Nodes': job.nnodes,
-                'Elapsed Time': job.time,
+                'Elapsed Time': job.elapsed,
                 'Start Time': job.start,
                 'Priority': job.priority,
                 } for job in st.session_state[f'job_manager_{src}'].jobs_submitted]
@@ -404,22 +406,22 @@ def show_submitted_jobs():
 
 def sort_key_fcfs(job):
     type_order = 0 if job.type.startswith('QC') else 1
-    return type_order
+    return (type_order, job.timestamp)
 
 
 def sort_key_sjf(job):
     type_order = 0 if job.type.startswith('QC') else 1
-    return (type_order, job.nnodes*job.time)
+    return (type_order, job.nnodes*job.elapsed, job.timestamp)
 
 
 def sort_key_priority(job):
     type_order = 0 if job.type.startswith('QC') else 1
-    return (type_order, job.priority)
+    return (type_order, job.priority, job.timestamp)
 
 
 def sort_key_qc(job):
     qc = get_num_from_0(job.type)
-    return (qc, job.priority)
+    return (qc, job.priority, job.timestamp)
 
 
 def qc_util(arr_qc_flag): 
@@ -487,9 +489,9 @@ def plot_hpc():
                         qc = get_num_from_0(job.type)
                         fc = color(f'qc{qc+1}')
                 
-                    rect = patches.Rectangle(job.map, job.time, job.nnodes, edgecolor='black', facecolor=fc)
+                    rect = patches.Rectangle(job.map, job.elapsed, job.nnodes, edgecolor='black', facecolor=fc)
                     ax.add_patch(rect)
-                    ax.text(job.map[0]+job.time/2, job.map[1]+job.nnodes/2, f'{job.vid}-{job.priority}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
+                    ax.text(job.map[0]+job.elapsed/2, job.map[1]+job.nnodes/2, f'{job.vid}-{job.priority}-{job.type}', size=10, horizontalalignment='center', verticalalignment='center')
 
             st.header(f'HPC{src+1} Schedule')
             st.pyplot(fig)
@@ -511,18 +513,18 @@ def update_mapping(nsteps):
         # update job.map
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
             if job.status == 'RUNNING':
-                job.time -= nsteps
-                if job.time <= 0:
+                job.elapsed -= nsteps
+                if job.elapsed <= 0:
                     job.status = 'FINISH'
             elif job.status == 'QUEUED':
                 start = job.map[0] - nsteps
-                end = start + job.time
+                end = start + job.elapsed
                 if end <= 0: # start < 0
                     job.status = 'FINISH'
                 elif start <= 0: # end > 0
                     job.status = 'RUNNING'        
                     job.map = (0, job.map[1])
-                    job.time = end
+                    job.elapsed = end
                 else: # start > 0, end > 0
                     job.map = (job.map[0]-nsteps, job.map[1])   
 
@@ -551,7 +553,7 @@ def app_layout():
 
     col1, col2, col3, col4 = st.sidebar.columns([1,1,1,1])
     nnodes = col1.number_input('HPC Nodes', min_value=1, max_value=96, value=5, step=1)
-    time = col2.number_input('Elapsed Time', min_value=1, max_value=60, value=5, step=1)
+    elapsed = col2.number_input('Elapsed Time', min_value=1, max_value=60, value=5, step=1)
     start = col3.number_input('Start Time', min_value=0, max_value=120, value=0, step=1)
     priority = col4.number_input('Job Priority', min_value=1, max_value=20, value=1, step=1)
 
@@ -559,7 +561,7 @@ def app_layout():
 
     col1, col2 = st.sidebar.columns([1,1])
     if col1.button(label='Submit', type='primary'):
-        submit(hpc, type, nnodes, time, start, priority)
+        submit(hpc, type, nnodes, elapsed, start, priority)
     if col2.button(label='Clear'):
         st.cache_data.clear() # clear cache data via @st.cache_data, not including st.session_state
         for key in st.session_state.keys():

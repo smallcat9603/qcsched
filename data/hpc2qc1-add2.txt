@@ -1,0 +1,3 @@
+# HPC Selection, Job Type, HPC Nodes, Elapsed Time, Start Time, Priority
+HPC1,QC1,6,3,0,2
+HPC2,QC1,4,3,0,3
