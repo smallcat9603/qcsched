@@ -355,10 +355,15 @@ def schedule(algo: str, resched: str):
 
     # first schdule qc jobs
     for qc_job in qc_sched:
+        sched = False
         for src in range(NUM_HPC):
             for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
                 if qc_job.id == job.id:
                     map(job, algo)
+                    sched = True
+                    break
+            if sched:
+                break
 
     # then schedule hpc jobs
     for src in range(NUM_HPC):
