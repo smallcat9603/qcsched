@@ -15,15 +15,15 @@ SUSPEND_TOLERANCE = 1
 
 
 class Job:
-    def __init__(self, src: int, id: str, vid: str, type: str, nnodes: int, elapsed: int, start: int, priority: int):
-        self.src = src # 0 (HPC1), 1 (HPC2), 2 (HPC3)
+    def __init__(self, src, id, vid, type, nnodes, elapsed, start, priority):
+        self.src = src
         self.id = id # for node mapping use, can identify qc job or not
         self.vid = vid # for display, cannot identify qc job or not
-        self.type = type # HPC, QC1, QC2
-        self.nnodes = nnodes # number of HPC nodes
-        self.elapsed = elapsed # expected elasped time
-        self.start = start # starting time
-        self.priority = priority # 1 for highest priority
+        self.type = type
+        self.nnodes = nnodes
+        self.elapsed = elapsed 
+        self.start = start
+        self.priority = priority
         self.rstart = 0
         self.end = 0
         self.status = 'ACCEPT'
@@ -31,12 +31,14 @@ class Job:
         self.timestamp = time.time()
         
     def __repr__(self):
-        return f'Job(src={self.src}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, elapsed={self.elapsed}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map}, timestamp={self.timestamp})'
+        return f'Job(src={self.src}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, elapsed={self.elapsed}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map})'
     
 
 class Semaphore:
-    def __init__(self): 
-        self.qc_flag = {i: np.zeros(SCHED_MAP_TIME, dtype=int) for i in range(NUM_QC)} # t represents (t, t+1) occupation, 0: available, 1: occupied
+    def __init__(self): # 0: available, 1: occupied
+        self.qc_flag = {}
+        for i in range(NUM_QC): 
+            self.qc_flag[i] = np.zeros(SCHED_MAP_TIME, dtype=int) # t represents (t, t+1) occupation
 
     def __repr__(self):
         return f'qc_flag={self.qc_flag}'  
@@ -44,11 +46,34 @@ class Semaphore:
 
 class JobManager:  
     def __init__(self):
-        self.hpc_cnt = 0 # add 1 if submitting an hpc job
-        self.qc_cnt = {i: 0 for i in range(NUM_QC)} # add 1 if submitting a qc job
-        self.jobs_submitted = [] # all submitted jobs
-        self.jobs_scheduled = [] # all scheduled jobs
+        self.hpc_count = 0
+        self.qc_count = {}
+        for i in range(NUM_QC):
+            self.qc_count[i] = 0
+        self.jobs_submitted = []
+        self.jobs_scheduled = []
         self.sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME), dtype=int) # (n, t) represents (t, t+1) occupation at n-th node
+
+
+def wait_time(scheduled, scheduled_qc):
+    wtime = 0.0
+    wtime_qc = 0.0
+
+    for src in range(NUM_HPC):
+        for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+            if job.status == 'QUEUED':
+                wtime += job.map[0]
+                if job.type.startswith('QC'):
+                    wtime_qc += job.map[0]
+
+    avg_wtime = 'na'
+    avg_wtime_qc = 'na'
+    if scheduled > 0:
+        avg_wtime = str(round(wtime/scheduled, 1))
+    if scheduled_qc > 0:
+        avg_wtime_qc = str(round(wtime_qc/scheduled_qc, 1))
+
+    return avg_wtime, avg_wtime_qc
 
 
 def show_statistics():
@@ -57,33 +82,26 @@ def show_statistics():
     queued = 0
     hold = 0
     finish = 0
-    wtime = []
 
     total_qc = 0
     running_qc = 0
     queued_qc = 0
     hold_qc = 0
     finish_qc = 0
-    wtime_qc = []
 
     for src in range(NUM_HPC):
         total += len(st.session_state[f'job_manager_{src}'].jobs_submitted)
-        # total_qc += sum(1 for job in st.session_state[f'job_manager_{src}'].jobs_submitted if job.type.startswith('QC'))
         for job in st.session_state[f'job_manager_{src}'].jobs_submitted:
             if job.type.startswith('QC'):
                 total_qc += 1
             if job.status == 'RUNNING':
                 running += 1
-                wtime.append(0)
                 if job.type.startswith('QC'):
                     running_qc += 1
-                    wtime_qc.append(0)
             elif job.status == 'QUEUED':
                 queued += 1
-                wtime.append(job.map[0])
                 if job.type.startswith('QC'):
                     queued_qc += 1
-                    wtime_qc.append(job.map[0])
             elif job.status == 'HOLD':
                 hold += 1
                 if job.type.startswith('QC'):
@@ -92,9 +110,8 @@ def show_statistics():
                 finish += 1
                 if job.type.startswith('QC'):
                     finish_qc += 1
-            
-    avg_wtime = round(np.mean(wtime), 1) if len(wtime) else 0.0
-    avg_wtime_qc = round(np.mean(wtime_qc), 1) if len(wtime_qc) else 0.0
+
+    avg_wtime, avg_wtime_qc = wait_time(running+queued, running_qc+queued_qc)
 
     st.header('Statistics (QC)')
     cols = st.columns(6)
@@ -115,34 +132,34 @@ def init():
             st.session_state[f'job_manager_{src}'] = JobManager() 
 
 
-def get_num_from_0(text: str) -> int:
-    return int(text[-1]) - 1
+def get_num_from_0(str):
+    return int(str[-1]) - 1
 
 
-def get_id(src: int, type: str) -> str:
+def get_id(src, type):
     if type.startswith('QC'):
         qc = get_num_from_0(type)
         # record qc job count at src hpc
-        st.session_state[f"job_manager_{src}"].qc_cnt[qc] += 1
+        st.session_state[f"job_manager_{src}"].qc_count[qc] += 1
         # allocate qc job id, ex 191000
-        id = f'{src+1}9{qc+1}{st.session_state[f"job_manager_{src}"].qc_cnt[qc]:03d}'            
+        id = f'{src+1}9{qc+1}{st.session_state[f"job_manager_{src}"].qc_count[qc]:03d}'            
     else:
         # record hpc job count at src hpc
-        st.session_state[f'job_manager_{src}'].hpc_cnt += 1 
+        st.session_state[f'job_manager_{src}'].hpc_count += 1 
         # allocate hpc job id, ex 100000
-        id = f'{src+1}{st.session_state[f"job_manager_{src}"].hpc_cnt:05d}' 
+        id = f'{src+1}{st.session_state[f"job_manager_{src}"].hpc_count:05d}' 
     return id
 
 
-def get_vid(src: int) -> str:
-    vid = st.session_state[f"job_manager_{src}"].hpc_cnt
+def get_vid(src):
+    vid = st.session_state[f"job_manager_{src}"].hpc_count
     for i in range(NUM_QC):
-        vid += st.session_state[f"job_manager_{src}"].qc_cnt[i]
+        vid += st.session_state[f"job_manager_{src}"].qc_count[i]
     vid = f'{src+1}{vid:05d}'            
     return vid
 
 
-def submit(hpc: str, type: str, nnodes: int, elapsed: int, start: int, priority: int):
+def submit(hpc, type, nnodes, elapsed, start, priority):
     src = get_num_from_0(hpc) 
     id = get_id(src, type)
     vid = get_vid(src)
@@ -166,7 +183,7 @@ def import_file(uploaded_file):
         st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, elapsed=elapsed, start=start, priority=priority))
 
 
-def delete_job(vid: str) -> bool:
+def delete_job(vid):
     if not vid.isdigit():
         return False
     src = get_num_from_0(vid[0])
@@ -184,7 +201,7 @@ def delete_job(vid: str) -> bool:
     return False
 
 
-def do_mapping(job: Job, col: int, row: int):
+def do_mapping(job, col, row):
     # fill in sched map with job id
     st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.elapsed)] = int(job.id)
     # change semaphore status for qc
@@ -200,19 +217,19 @@ def do_mapping(job: Job, col: int, row: int):
     job.map = (col, row)
 
 
-def release_nodes(job: Job):
+def release_nodes(job):
     col = job.map[0]
     row = job.map[1]
     # restore sched map with 0
     st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.elapsed)] = 0
 
 
-def release_semaphor(job: Job):
+def release_semaphor(job):
     qc = get_num_from_0(job.type)
     st.session_state['semaphore'].qc_flag[qc][job.map[0]:job.map[0]+job.elapsed] = 0
 
 
-def suspend(job: Job):
+def suspend(job):
     # change job status
     job.status = 'SUSPEND'
     # restore sched map with 0
@@ -222,20 +239,20 @@ def suspend(job: Job):
         release_semaphor(job)
 
 
-def suspend_hpc_jobs(src: int, ids: list):
+def suspend_hpc_jobs(src, ids):
     for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
         if int(job.id) in ids:
             suspend(job) 
 
 
-def check_mapping(src: int):
+def check_mapping(src):
     st.write(st.session_state[f'job_manager_{src}'].sched_map[::-1]) # np.array index align with axis  
 
 
-def resched_start() -> int:
+def resched_start():
     cols = []
     for src in range(NUM_HPC):
-        if not len(st.session_state[f'job_manager_{src}'].jobs_scheduled):
+        if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) == 0:
             continue
         
         scheduled_vids = {job.vid for job in st.session_state[f'job_manager_{src}'].jobs_scheduled}
@@ -246,29 +263,30 @@ def resched_start() -> int:
             return 0
         
         deleted = scheduled_vids - submitted_vids
-        for vid in deleted:
-            for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
-                if vid == job.vid:
-                    if job.status == 'SUSPEND':
-                        cols.append(job.map[0])
-                    break
+        if deleted:
+            for vid in deleted:
+                for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+                    if vid == job.vid:
+                        if job.status == 'SUSPEND':
+                            cols.append(job.map[0])
+                        break
 
-    if len(cols):
+    if len(cols) > 0:
         return min(cols)
     else:
         return -1
     
 
-def resched_jobs(src: int, start: int):
+def resched_jobs(src, start):
     for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
         if job.status == 'QUEUED' and job.map[0] > start:
             suspend(job)  
 
 
-def map(job: Job, algo: str) -> bool:
+def map(job, algo):
     if job.status == 'ACCEPT' or job.status == 'SUSPEND' or job.status == 'HOLD':
         if job.start + job.elapsed < SCHED_MAP_TIME + 1:
-            qc_start = None
+            qc_start = -1
             nsuspend = job.nnodes
             ids = []
             col_row = None 
@@ -278,7 +296,7 @@ def map(job: Job, algo: str) -> bool:
                     qc = get_num_from_0(job.type)
                     if np.any(st.session_state['semaphore'].qc_flag[qc][col:col+job.elapsed] > 0):
                         continue     
-                    if not qc_start:
+                    if qc_start < 0:
                         qc_start = col # qc job should start at time within (qc_start, qc_start+SUSPEND_TOLERANCE)
 
                 for row in range(HPC_NODES-job.nnodes+1): # y-axis
@@ -301,7 +319,7 @@ def map(job: Job, algo: str) -> bool:
                             # qc job location to be mapped
                             col_row = (col, row)
 
-                if qc_start and col == min(qc_start+SUSPEND_TOLERANCE, SCHED_MAP_TIME-job.elapsed) and col_row and job.type.startswith('QC') and algo == 'QPriority': # not suspend hpc job if it will finish in short time (1)
+                if qc_start >= 0 and col == min(qc_start+SUSPEND_TOLERANCE, SCHED_MAP_TIME-job.elapsed) and col_row and job.type.startswith('QC') and algo == 'QPriority': # not suspend hpc job if it will finish in short time (1)
                     # suspend running hpc jobs
                     suspend_hpc_jobs(job.src, ids)    
                     # map qc job            
@@ -314,26 +332,26 @@ def map(job: Job, algo: str) -> bool:
     return False
 
 
-def color(text: str) -> str:
+def color(str):
     colors = {
         'hpc': 'green',
         'qc1': 'orange',
         'qc2': 'violet',
     }
-    return colors[text]
+    return colors[str]
 
 
 # consider inter-hpc priority
-def schedule(algo: str, resched: str):
+def schedule(algo, resched):
     qc_sched = [] # all qc jobs
 
-    start = None # reschedule starting point, None if not needed, 0 if needed for all queued jobs
+    start = -1 # reschedule starting point, -1 if not needed, 0 if needed for all queued jobs
     if resched == 'Yes':
         start = resched_start()
 
     for src in range(NUM_HPC):
         st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute, ex jobs can be separately added or removed but job attribute modification will reflect to both
-        if start:
+        if start >= 0:
             resched_jobs(src, start) # suspend job, release nodes, release semaphor (qc job)
 
         if algo == 'FCFS':
@@ -343,7 +361,7 @@ def schedule(algo: str, resched: str):
         elif algo.endswith('Priority'):
             st.session_state[f'job_manager_{src}'].jobs_scheduled.sort(key=sort_key_priority)
         
-        for job in st.session_state[f'job_manager_{src}'].jobs_scheduled: # qc jobs always are in front
+        for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
             if job.type.startswith('QC'):
                 qc_sched.append(job)
             else:
@@ -378,7 +396,7 @@ def show_submitted_jobs():
     tabs = st.tabs([f'HPC{src+1}' for src in range(NUM_HPC)])
 
     for src in range(NUM_HPC):
-        if len(st.session_state[f'job_manager_{src}'].jobs_submitted):
+        if len(st.session_state[f'job_manager_{src}'].jobs_submitted) > 0:
             df = pd.DataFrame([{
                 'Job ID': job.vid,
                 'Status': job.status,
@@ -394,27 +412,27 @@ def show_submitted_jobs():
             tabs[src].info(f'No job submitted in HPC{src+1}')
 
 
-def sort_key_fcfs(job: Job):
+def sort_key_fcfs(job):
     type_order = 0 if job.type.startswith('QC') else 1
     return (type_order, job.timestamp)
 
 
-def sort_key_sjf(job: Job):
+def sort_key_sjf(job):
     type_order = 0 if job.type.startswith('QC') else 1
     return (type_order, job.nnodes*job.elapsed, job.timestamp)
 
 
-def sort_key_priority(job: Job):
+def sort_key_priority(job):
     type_order = 0 if job.type.startswith('QC') else 1
     return (type_order, job.priority, job.timestamp)
 
 
-def sort_key_qc(job: Job):
+def sort_key_qc(job):
     qc = get_num_from_0(job.type)
     return (qc, job.priority, job.timestamp)
 
 
-def qc_util(arr_qc_flag) -> list: 
+def qc_util(arr_qc_flag): 
     """
     Provide list of (start, len) according to non-zero elements in qc_flag 
     """
@@ -459,7 +477,7 @@ def plot_qc():
 
 def plot_hpc():
     for src in range(NUM_HPC):
-        if len(st.session_state[f'job_manager_{src}'].jobs_scheduled):
+        if len(st.session_state[f'job_manager_{src}'].jobs_scheduled) > 0:
             fig, ax = plt.subplots(figsize=(8, 4))
             # ax.set_title(f'HPC{src+1}')
             ax.set_ylim(0, HPC_NODES)
@@ -492,7 +510,7 @@ def plot():
     plot_hpc()
 
 
-def update_mapping(nsteps: int):
+def update_mapping(nsteps):
     # update sched map
     for src in range(NUM_HPC):
         # move to left
@@ -579,7 +597,7 @@ def app_layout():
         'Select Scheduling Algorithm', ['FCFS', 'SJF', 'Priority', 'QPriority'], default='QPriority'
     )
     resched = st.sidebar.segmented_control(
-        'Allow Re-scheduling (e.g., after HPC Jobs are suspended)', ['No', 'Yes'], default='Yes'
+        'Allow Re-scheduling after HPC Jobs are suspended', ['No', 'Yes'], default='Yes'
     )
 
     if st.sidebar.button(label='Schedule', type='primary'):
