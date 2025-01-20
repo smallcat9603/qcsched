@@ -9,9 +9,9 @@ from utils import color, qc_util, get_num_from_0
 
 
 def plot_qc():
-    for i in range(NUM_QC):
+    for qc in range(NUM_QC):
         # st.write(st.session_state['semaphore'].qc_flag[i])
-        if np.any(st.session_state['semaphore'].qc_flag[i] > 0):
+        if np.any(st.session_state['semaphore'].qc_flag[qc] > 0):
             fig, ax = plt.subplots(figsize=(8, 1))
             # ax.set_title(f'QC{i+1}')
             ax.set_ylim(0, 1)
@@ -23,14 +23,14 @@ def plot_qc():
             ax.spines['right'].set_color('none')
             ax.spines['top'].set_color('none')
 
-            fc = color(f'qc{i+1}')
-            utils = qc_util(st.session_state['semaphore'].qc_flag[i])
+            fc = color(f'qc{qc+1}')
+            utils = qc_util(st.session_state['semaphore'].qc_flag[qc])
             for util in utils:
                 rect = patches.Rectangle((util[0], 0), util[1], 1, edgecolor='black', facecolor=fc)
                 ax.add_patch(rect)
-                ax.text(util[0]+util[1]/2, 1/2, f'{st.session_state['semaphore'].qc_flag[i][util[0]]}', size=10, horizontalalignment='center', verticalalignment='center')   
+                ax.text(util[0]+util[1]/2, 1/2, f'{st.session_state['semaphore'].qc_flag[qc][util[0]]}', size=10, horizontalalignment='center', verticalalignment='center')   
 
-            st.header(f'QC{i+1} Schedule')
+            st.header(f'QC{qc+1} Schedule')
             st.pyplot(fig) 
 
 

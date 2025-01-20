@@ -107,6 +107,3 @@ def qc_util(arr_qc_flag) -> list:
         if t == SCHED_MAP_TIME - 1 and arr_qc_flag[t] > 0:
             result.append((cur, t-cur+1))
     return result
-
-def check_mapping(src: int):
-    st.write(st.session_state[f'job_manager_{src}'].sched_map[::-1]) # np.array index align with axis 

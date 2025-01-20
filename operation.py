@@ -5,6 +5,20 @@ from constants import NUM_HPC, NUM_QC
 from models import Job
 from utils import get_num_from_0, get_id, get_vid
 
+def append_job(src: int, type: str, nnodes: int, elapsed: int, start: int, priority: int):
+    id = get_id(src, type)
+    vid = get_vid(src)
+
+    # record all jobs at src hpc
+    st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, 
+                                                                        id=id, 
+                                                                        vid=vid, 
+                                                                        type=type, 
+                                                                        nnodes=nnodes, 
+                                                                        elapsed=elapsed, 
+                                                                        start=start, 
+                                                                        priority=priority))
+
 
 @st.cache_data
 def import_file(uploaded_file):
@@ -16,18 +30,24 @@ def import_file(uploaded_file):
         elapsed = int(row[3])
         start = int(row[4])
         priority = int(row[5]) 
-        id = get_id(src, type)
-        vid = get_vid(src)
-        # record all jobs at src hpc
-        st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, elapsed=elapsed, start=start, priority=priority))
+
+        append_job(src=src, 
+                type=type, 
+                nnodes=nnodes, 
+                elapsed=elapsed,
+                start=start,
+                priority=priority)
 
 
 def submit(hpc: str, type: str, nnodes: int, elapsed: int, start: int, priority: int):
     src = get_num_from_0(hpc) 
-    id = get_id(src, type)
-    vid = get_vid(src)
-    # record all jobs at src hpc
-    st.session_state[f'job_manager_{src}'].jobs_submitted.append(Job(src=src, id=id, vid=vid, type=type, nnodes=nnodes, elapsed=elapsed, start=start, priority=priority))
+
+    append_job(src=src, 
+               type=type, 
+               nnodes=nnodes, 
+               elapsed=elapsed,
+               start=start,
+               priority=priority)
 
 
 def update_mapping(nsteps: int):

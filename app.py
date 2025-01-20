@@ -4,7 +4,7 @@ from utils import init, show_submitted_jobs
 from stats import show_statistics
 from visualizer import plot
 from operation import import_file, submit, update_mapping
-from scheduler import delete_job, schedule
+from scheduler import del_job, schedule
 
 
 def run():
@@ -28,7 +28,7 @@ def run():
     start = col3.number_input('Start Time', min_value=0, max_value=120, value=0, step=1)
     priority = col4.number_input('Job Priority', min_value=1, max_value=20, value=1, step=1)
 
-    init()
+    init() # initialize st.session_state['semaphore'] and st.session_state[f'job_manager_{src}']
 
     col1, col2 = st.sidebar.columns([1,1])
     if col1.button(label='Submit', type='primary'):
@@ -47,7 +47,7 @@ def run():
     expander = st.sidebar.expander('Delete')
     vid = expander.text_input('Job ID', placeholder='100001')
     if expander.button(label='Delete'):
-        if delete_job(vid):
+        if del_job(vid):
             expander.success(f'Job {vid} deleted!')
         else:
             expander.error(f'Job {vid} deletion failed!')
@@ -76,7 +76,7 @@ def run():
 
     show_statistics()
 
-    plot()
+    plot() # include qc and hpc
 
 
 if __name__=='__main__':

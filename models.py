@@ -16,7 +16,7 @@ class Job:
         self.rstart = 0
         self.end = 0
         self.status = 'ACCEPT'
-        self.map = None
+        self.map = None # (col, row)
         self.timestamp = time.time()
         
     def __repr__(self):
@@ -38,3 +38,6 @@ class JobManager:
         self.jobs_submitted = [] # all submitted jobs
         self.jobs_scheduled = [] # all scheduled jobs
         self.sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME), dtype=int) # (n, t) represents (t, t+1) occupation at n-th node
+
+    def __repr__(self):
+        return self.sched_map[::-1] # np.array index align with axis

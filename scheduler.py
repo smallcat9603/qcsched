@@ -99,7 +99,7 @@ def release_semaphor(job: Job):
     st.session_state['semaphore'].qc_flag[qc][job.map[0]:job.map[0]+job.elapsed] = 0
 
 
-def delete_job(vid: str) -> bool:
+def del_job(vid: str) -> bool:
     if not vid.isdigit():
         return False
     src = get_num_from_0(vid[0])
