@@ -1,9 +1,24 @@
 import streamlit as st
 import pandas as pd
 
-from constants import NUM_HPC, NUM_QC
-from models import Job
+from models import Job, Semaphore, JobManager
 from utils import get_num_from_0, get_id, get_vid
+
+
+def init(mode):
+    if 'semaphore' not in st.session_state:
+        st.session_state['HPC_NODES'] = 10 if mode == 'Demo' else 256
+        st.session_state['SCHED_MAP_TIME'] = 20 if mode == 'Demo' else 48
+        st.session_state['NUM_HPC'] = 3
+        st.session_state['NUM_QC'] = 2
+        st.session_state['SUSPEND_TOLERANCE'] = 1
+
+        # co-scheduler
+        st.session_state['semaphore'] = Semaphore() 
+        for src in range(st.session_state['NUM_HPC']): 
+            # per hpc
+            st.session_state[f'job_manager_{src}'] = JobManager() 
+
 
 def append_job(src: int, type: str, nnodes: int, elapsed: int, start: int, priority: int):
     id = get_id(src, type)
@@ -52,7 +67,7 @@ def submit(hpc: str, type: str, nnodes: int, elapsed: int, start: int, priority:
 
 def update_mapping(nsteps: int):
     # update sched map
-    for src in range(NUM_HPC):
+    for src in range(st.session_state['NUM_HPC']):
         # move to left
         st.session_state[f'job_manager_{src}'].sched_map[:, :-nsteps] = st.session_state[f'job_manager_{src}'].sched_map[:, nsteps:]
         # fill rightmost with 0
@@ -77,7 +92,7 @@ def update_mapping(nsteps: int):
                     job.map = (job.map[0]-nsteps, job.map[1])   
 
     # update semaphore status for qc
-    for i in range(NUM_QC):
+    for i in range(st.session_state['NUM_QC']):
         # move to left
         st.session_state['semaphore'].qc_flag[i][:-nsteps] = st.session_state['semaphore'].qc_flag[i][nsteps:]
         # fill rightmost with 0

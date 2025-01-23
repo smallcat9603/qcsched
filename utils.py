@@ -1,17 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-from constants import SCHED_MAP_TIME, NUM_HPC, NUM_QC
-from models import Job, Semaphore, JobManager
-
-
-def init():
-    if 'semaphore' not in st.session_state:
-        # co-scheduler
-        st.session_state['semaphore'] = Semaphore() 
-        for src in range(NUM_HPC): 
-            # per hpc
-            st.session_state[f'job_manager_{src}'] = JobManager() 
+from models import Job
 
 
 def get_num_from_0(text: str) -> int:
@@ -35,7 +25,7 @@ def get_id(src: int, type: str) -> str:
 
 def get_vid(src: int) -> str:
     vid = st.session_state[f"job_manager_{src}"].hpc_cnt
-    for i in range(NUM_QC):
+    for i in range(st.session_state['NUM_QC']):
         vid += st.session_state[f"job_manager_{src}"].qc_cnt[i]
     vid = f'{src+1}{vid:05d}'            
     return vid
@@ -53,9 +43,9 @@ def color(text: str) -> str:
 def show_submitted_jobs():
     st.header('Jobs Submitted')
 
-    tabs = st.tabs([f'HPC{src+1}' for src in range(NUM_HPC)])
+    tabs = st.tabs([f'HPC{src+1}' for src in range(st.session_state['NUM_HPC'])])
 
-    for src in range(NUM_HPC):
+    for src in range(st.session_state['NUM_HPC']):
         if st.session_state[f'job_manager_{src}'].jobs_submitted:
             df = pd.DataFrame([{
                 'Job ID': job.vid,
@@ -67,7 +57,7 @@ def show_submitted_jobs():
                 'Priority': job.priority,
                 } for job in st.session_state[f'job_manager_{src}'].jobs_submitted]
             )
-            tabs[src].table(df)
+            tabs[src].dataframe(df, hide_index=True)
         else:
             tabs[src].info(f'No job submitted in HPC{src+1}')
 
@@ -98,12 +88,12 @@ def qc_util(arr_qc_flag) -> list:
     """
     result = []
     cur = 0
-    for t in range(1, SCHED_MAP_TIME):
+    for t in range(1, st.session_state['SCHED_MAP_TIME']):
         if arr_qc_flag[t] != arr_qc_flag[t-1]:
             if arr_qc_flag[t-1] > 0:
                 result.append((cur, t-cur))
             if arr_qc_flag[t] > 0:
                 cur = t
-        if t == SCHED_MAP_TIME - 1 and arr_qc_flag[t] > 0:
+        if t == st.session_state['SCHED_MAP_TIME'] - 1 and arr_qc_flag[t] > 0:
             result.append((cur, t-cur+1))
     return result

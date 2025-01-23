@@ -1,7 +1,6 @@
 import streamlit as st
 import numpy as np
 
-from constants import HPC_NODES, SCHED_MAP_TIME, NUM_HPC, SUSPEND_TOLERANCE
 from models import Job
 from utils import get_num_from_0, sort_key_fcfs, sort_key_sjf, sort_key_priority, sort_key_qc
 
@@ -24,21 +23,21 @@ def do_mapping(job: Job, col: int, row: int):
 
 def map(job: Job, algo: str) -> bool:
     if job.status == 'ACCEPT' or job.status == 'SUSPEND' or job.status == 'HOLD':
-        if job.start + job.elapsed < SCHED_MAP_TIME + 1:
+        if job.start + job.elapsed < st.session_state['SCHED_MAP_TIME'] + 1:
             qc_start = -1
             nsuspend = job.nnodes
             ids = []
             col_row = None 
 
-            for col in range(job.start, SCHED_MAP_TIME-job.elapsed+1): # x-axis
+            for col in range(job.start, st.session_state['SCHED_MAP_TIME']-job.elapsed+1): # x-axis
                 if job.type.startswith('QC'):
                     qc = get_num_from_0(job.type)
                     if np.any(st.session_state['semaphore'].qc_flag[qc][col:col+job.elapsed] > 0):
                         continue     
                     if qc_start < 0:
-                        qc_start = col # qc job should start at time within (qc_start, qc_start+SUSPEND_TOLERANCE)
+                        qc_start = col # qc job should start at time within (qc_start, qc_start+st.session_state['SUSPEND_TOLERANCE'])
 
-                for row in range(HPC_NODES-job.nnodes+1): # y-axis
+                for row in range(st.session_state['HPC_NODES']-job.nnodes+1): # y-axis
                     if np.all(st.session_state[f'job_manager_{job.src}'].sched_map[row:(row+job.nnodes), col:(col+job.elapsed)] == 0): 
                         do_mapping(job, col, row)
                         return True
@@ -58,7 +57,7 @@ def map(job: Job, algo: str) -> bool:
                             # qc job location to be mapped
                             col_row = (col, row)
 
-                if qc_start >= 0 and col == min(qc_start+SUSPEND_TOLERANCE, SCHED_MAP_TIME-job.elapsed) and col_row and job.type.startswith('QC') and algo == 'QPriority': # not suspend hpc job if it will finish in short time (1)
+                if qc_start >= 0 and col == min(qc_start+st.session_state['SUSPEND_TOLERANCE'], st.session_state['SCHED_MAP_TIME']-job.elapsed) and col_row and job.type.startswith('QC') and algo == 'QPriority': # not suspend hpc job if it will finish in short time (1)
                     # suspend running hpc jobs
                     suspend_hpc_jobs(job.src, ids)    
                     # map qc job            
@@ -125,7 +124,7 @@ def resched_jobs(src: int, start: int):
 
 def resched_start() -> int:
     cols = []
-    for src in range(NUM_HPC):
+    for src in range(st.session_state['NUM_HPC']):
         if not st.session_state[f'job_manager_{src}'].jobs_scheduled:
             continue
         
@@ -158,7 +157,7 @@ def schedule(algo: str, resched: str):
     if resched == 'Yes':
         start = resched_start()
 
-    for src in range(NUM_HPC):
+    for src in range(st.session_state['NUM_HPC']):
         st.session_state[f'job_manager_{src}'].jobs_scheduled = st.session_state[f'job_manager_{src}'].jobs_submitted.copy() # separate individuals, but the same child attribute, ex jobs can be separately added or removed but job attribute modification will reflect to both
         if start >= 0:
             resched_jobs(src, start) # suspend job, release nodes, release semaphor (qc job)
@@ -183,7 +182,7 @@ def schedule(algo: str, resched: str):
     # first schdule qc jobs
     for qc_job in qc_sched:
         sched = False
-        for src in range(NUM_HPC):
+        for src in range(st.session_state['NUM_HPC']):
             for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
                 if qc_job.id == job.id:
                     map(job, algo)
@@ -193,7 +192,7 @@ def schedule(algo: str, resched: str):
                 break
 
     # then schedule hpc jobs
-    for src in range(NUM_HPC):
+    for src in range(st.session_state['NUM_HPC']):
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
             if not job.type.startswith('QC'):              
                 map(job, algo)  

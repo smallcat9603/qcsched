@@ -1,7 +1,7 @@
+import streamlit as st
 import numpy as np
 import time
 
-from constants import HPC_NODES, SCHED_MAP_TIME, NUM_QC
 
 class Job:
     def __init__(self, src: int, id: str, vid: str, type: str, nnodes: int, elapsed: int, start: int, priority: int):
@@ -25,7 +25,7 @@ class Job:
 
 class Semaphore:
     def __init__(self): 
-        self.qc_flag = {i: np.zeros(SCHED_MAP_TIME, dtype=int) for i in range(NUM_QC)} # t represents (t, t+1) occupation, 0: available, 1: occupied
+        self.qc_flag = {i: np.zeros(st.session_state['SCHED_MAP_TIME'], dtype=int) for i in range(st.session_state['NUM_QC'])} # t represents (t, t+1) occupation, 0: available, 1: occupied
 
     def __repr__(self):
         return f'qc_flag={self.qc_flag}'  
@@ -34,10 +34,10 @@ class Semaphore:
 class JobManager:  
     def __init__(self):
         self.hpc_cnt = 0 # add 1 if submitting an hpc job
-        self.qc_cnt = {i: 0 for i in range(NUM_QC)} # add 1 if submitting a qc job
+        self.qc_cnt = {i: 0 for i in range(st.session_state['NUM_QC'])} # add 1 if submitting a qc job
         self.jobs_submitted = [] # all submitted jobs
         self.jobs_scheduled = [] # all scheduled jobs
-        self.sched_map = np.zeros((HPC_NODES, SCHED_MAP_TIME), dtype=int) # (n, t) represents (t, t+1) occupation at n-th node
+        self.sched_map = np.zeros((st.session_state['HPC_NODES'], st.session_state['SCHED_MAP_TIME']), dtype=int) # (n, t) represents (t, t+1) occupation at n-th node
 
     def __repr__(self):
         return self.sched_map[::-1] # np.array index align with axis

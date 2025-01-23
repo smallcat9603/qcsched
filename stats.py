@@ -1,8 +1,6 @@
 import streamlit as st
 import numpy as np
 
-from constants import NUM_HPC
-
 
 def show_statistics():
     total = 0
@@ -19,7 +17,7 @@ def show_statistics():
     finish_qc = 0
     wtime_qc = []
 
-    for src in range(NUM_HPC):
+    for src in range(st.session_state['NUM_HPC']):
         total += len(st.session_state[f'job_manager_{src}'].jobs_submitted)
         for job in st.session_state[f'job_manager_{src}'].jobs_submitted:
             if job.type.startswith('QC'):
