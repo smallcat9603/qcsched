@@ -2,6 +2,7 @@ import streamlit as st
 import numpy as np
 import time
 
+from utils import rtime
 
 class Job:
     def __init__(self, src: int, id: str, vid: str, type: str, nnodes: int, elapsed: int, start: int, priority: int):
@@ -13,6 +14,7 @@ class Job:
         self.elapsed = elapsed # expected elasped time
         self.start = start # starting time
         self.priority = priority # 1 for highest priority
+        self.relapsed = rtime(elapsed) # real elapsed time
         self.rstart = 0
         self.end = 0
         self.status = 'ACCEPT'
@@ -20,7 +22,7 @@ class Job:
         self.timestamp = time.time()
         
     def __repr__(self):
-        return f'Job(src={self.src}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, elapsed={self.elapsed}, start={self.start}, priority={self.priority}, status={self.status}, map={self.map}, timestamp={self.timestamp})'
+        return f'Job(src={self.src}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, elapsed={self.elapsed}, start={self.start}, priority={self.priority}, relapsed={self.relapsed}, status={self.status}, map={self.map}, timestamp={self.timestamp})'
     
 
 class Semaphore:

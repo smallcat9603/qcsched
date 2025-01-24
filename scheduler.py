@@ -2,7 +2,27 @@ import streamlit as st
 import numpy as np
 
 from models import Job
-from utils import get_num_from_0, sort_key_fcfs, sort_key_sjf, sort_key_priority, sort_key_qc
+from utils import get_num_from_0
+
+
+def sort_key_fcfs(job: Job):
+    type_order = 0 if job.type.startswith('QC') else 1
+    return (type_order, job.timestamp)
+
+
+def sort_key_sjf(job: Job):
+    type_order = 0 if job.type.startswith('QC') else 1
+    return (type_order, job.nnodes*job.elapsed, job.timestamp)
+
+
+def sort_key_priority(job: Job):
+    type_order = 0 if job.type.startswith('QC') else 1
+    return (type_order, job.priority, job.timestamp)
+
+
+def sort_key_qc(job: Job):
+    qc = get_num_from_0(job.type)
+    return (qc, job.priority, job.timestamp)
 
 
 def do_mapping(job: Job, col: int, row: int):

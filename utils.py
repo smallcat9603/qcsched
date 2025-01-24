@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
-
-from models import Job
+import random
 
 
 def get_num_from_0(text: str) -> int:
@@ -53,6 +52,7 @@ def show_submitted_jobs():
                 'Type': job.type,
                 'Nodes': job.nnodes,
                 'Elapsed Time': job.elapsed,
+                # 'Real Elapsed Time': job.relapsed,
                 'Start Time': job.start,
                 'Priority': job.priority,
                 } for job in st.session_state[f'job_manager_{src}'].jobs_submitted]
@@ -60,26 +60,6 @@ def show_submitted_jobs():
             tabs[src].dataframe(df, hide_index=True)
         else:
             tabs[src].info(f'No job submitted in HPC{src+1}')
-
-
-def sort_key_fcfs(job: Job):
-    type_order = 0 if job.type.startswith('QC') else 1
-    return (type_order, job.timestamp)
-
-
-def sort_key_sjf(job: Job):
-    type_order = 0 if job.type.startswith('QC') else 1
-    return (type_order, job.nnodes*job.elapsed, job.timestamp)
-
-
-def sort_key_priority(job: Job):
-    type_order = 0 if job.type.startswith('QC') else 1
-    return (type_order, job.priority, job.timestamp)
-
-
-def sort_key_qc(job: Job):
-    qc = get_num_from_0(job.type)
-    return (qc, job.priority, job.timestamp)
 
 
 def qc_util(arr_qc_flag) -> list: 
@@ -97,3 +77,39 @@ def qc_util(arr_qc_flag) -> list:
         if t == st.session_state['SCHED_MAP_TIME'] - 1 and arr_qc_flag[t] > 0:
             result.append((cur, t-cur+1))
     return result
+
+
+def cdf(data_list: list):
+    all_sum = sum(data_list)
+    cur_sum = 0
+    for prob in data_list:
+        cur_sum += prob
+        yield cur_sum/all_sum
+
+
+def rtime(elapsed: int) -> int:
+    # data from AXIES 2024 'スーパーコンピュータ WisteriaBDEC-01 における利用状況を考慮した運用の再検討'
+    exp_to_real_1, exp_to_real_1_5, exp_to_real_2, exp_to_real_5, exp_to_real_10, exp_to_real_50, exp_to_real_100, exp_to_real_500, exp_to_real_1000 = 26_942, 31_422, 68_526, 249_048, 328_095, 272_384, 21_913, 165_838, 16_621 
+    data_list = [exp_to_real_1000, exp_to_real_500, exp_to_real_100, exp_to_real_50, exp_to_real_10, exp_to_real_5, exp_to_real_2, exp_to_real_1_5, exp_to_real_1]
+    fin_1000, fin_500, fin_100, fin_50, fin_10, fin_5, fin_2, fin_1_5, fin_1 = cdf(data_list)
+
+    r = random.random()
+    if r < fin_1000:
+        return elapsed//1000 + 1
+    elif r < fin_500:
+        return elapsed//500 + 1
+    elif r < fin_100:
+        return elapsed//100 + 1
+    elif r < fin_50:
+        return elapsed//50 + 1
+    elif r < fin_10:
+        return elapsed//10 + 1
+    elif r < fin_5:
+        return elapsed//5 + 1
+    elif r < fin_2:
+        return elapsed//2 + 1
+    elif r < fin_1_5:
+        return elapsed*2//3 + 1
+    elif r < fin_1:
+        return elapsed
+
