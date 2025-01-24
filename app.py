@@ -3,8 +3,8 @@ import streamlit as st
 from utils import show_submitted_jobs
 from stats import show_statistics
 from visualizer import plot
-from operation import init, import_file, submit, update_mapping
-from scheduler import del_job, schedule
+from operation import init, import_file, submit, update_mapping, del_job
+from scheduler import schedule
 
 
 def run():
