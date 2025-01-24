@@ -91,6 +91,8 @@ def update_mapping(nsteps: int):
                 else: # start > 0, end > 0
                     job.map = (job.map[0]-nsteps, job.map[1])   
 
+            job.start = max(0, job.start-nsteps)
+
     # update semaphore status for qc
     for i in range(st.session_state['NUM_QC']):
         # move to left

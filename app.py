@@ -42,18 +42,18 @@ def run():
         if st.sidebar.button(label='Submit', type='primary'):
             submit(hpc, type, nnodes, elapsed, start, priority)
 
-        expander = st.sidebar.expander('Delete')
-        vid = expander.text_input('Job ID', placeholder='100001')
-        if expander.button(label='Delete'):
-            if del_job(vid):
-                expander.success(f'Job {vid} deleted!')
-            else:
-                expander.error(f'Job {vid} deletion failed!')
-
     expander = st.sidebar.expander('Import')
     uploaded_file = expander.file_uploader("Choose a file")
     if uploaded_file is not None:
         import_file(uploaded_file)
+
+    expander = st.sidebar.expander('Delete')
+    vid = expander.text_input('Job ID', placeholder='100001')
+    if expander.button(label='Delete'):
+        if del_job(vid):
+            expander.success(f'Job {vid} deleted!')
+        else:
+            expander.error(f'Job {vid} deletion failed!')
         
     show_submitted_jobs()
 
