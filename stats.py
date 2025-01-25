@@ -1,20 +1,13 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
 
 
 def show_statistics():
-    total = 0
-    running = 0
-    queued = 0
-    hold = 0
-    finish = 0
+    total = running = queued = hold = finish = 0
     wtime = []
 
-    total_qc = 0
-    running_qc = 0
-    queued_qc = 0
-    hold_qc = 0
-    finish_qc = 0
+    total_qc = running_qc = queued_qc = hold_qc = finish_qc = 0
     wtime_qc = []
 
     for src in range(st.session_state['NUM_HPC']):
@@ -54,3 +47,30 @@ def show_statistics():
     cols[3].metric('Hold', f'{hold} ({hold_qc})')
     cols[4].metric('Finish', f'{finish} ({finish_qc})')
     cols[5].metric('Wait', f'{avg_wtime} ({avg_wtime_qc})')
+
+
+def show_results():
+    njobs = njobs_qc = 0
+    wtime = []
+    wtime_qc = []
+
+    for src in range(st.session_state['NUM_HPC']):
+        njobs += len(st.session_state[f'job_manager_{src}'].jobs_submitted)
+        for job in st.session_state[f'job_manager_{src}'].jobs_submitted:
+            wtime.append(job.wait)
+            if job.type.startswith('QC'):
+                njobs_qc += 1
+                wtime_qc.append(job.wait)
+    
+    avg_wtime = round(np.mean(wtime), 1) if wtime else 0.0
+    avg_wtime_qc = round(np.mean(wtime_qc), 1) if wtime_qc else 0.0  
+
+    st.header('Simulation Result')
+    df = pd.DataFrame({
+        'Num of all jobs': njobs,
+        'Num of QC jobs': njobs_qc,
+        'Num of HPC jobs': njobs - njobs_qc,
+        'Avg wait time of all jobs': avg_wtime,
+        'Avg wait time of QC jobs': avg_wtime_qc,
+    }.items(), columns=['Metric','Value'])
+    st.dataframe(df, hide_index=True) 

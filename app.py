@@ -1,10 +1,11 @@
 import streamlit as st
 
 from utils import show_submitted_jobs
-from stats import show_statistics
+from stats import show_statistics, show_results
 from visualizer import plot
 from operation import init, import_file, submit, update_mapping, del_job
 from scheduler import schedule
+from simulator import simulate
 
 
 def run():
@@ -68,19 +69,30 @@ def run():
 
     if st.sidebar.button(label='Schedule', type='primary'):
         schedule(algo, resched)
-        st.rerun()
+        st.rerun()   
 
-    expander = st.sidebar.expander('Time Flies')
-    nsteps = expander.number_input('Number of Steps Forward', min_value=1, max_value=10, value=1, step=1)
-    if expander.button(label='Proceed'):
-        update_mapping(nsteps)
-        schedule(algo, resched)
-        st.rerun()
+    plot(mode) # include qc and hpc   
 
-    show_statistics()
+    if mode == 'Demo':
 
-    plot(mode) # include qc and hpc
+        expander = st.sidebar.expander('Time Flies')
+        nsteps = expander.number_input('Number of Steps Forward', min_value=1, max_value=10, value=1, step=1)
+        if expander.button(label='Proceed'):
+            update_mapping(nsteps)
+            schedule(algo, resched)
+            st.rerun()
 
+        show_statistics()
+
+    ################################## Simulation ##################################
+
+    else: # mode == 'simulation'      
+
+        if st.sidebar.button(label='Simulate', type='primary'):
+            simulate(algo, resched)
+            st.rerun()
+
+        show_results()
 
 if __name__=='__main__':
     run()

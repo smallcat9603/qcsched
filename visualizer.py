@@ -36,7 +36,7 @@ def plot_qc(mode):
 
 def plot_hpc(mode):
     for src in range(st.session_state['NUM_HPC']):
-        if st.session_state[f'job_manager_{src}'].jobs_scheduled:
+        if st.session_state[f'job_manager_{src}'].jobs_scheduled and any(job.status == 'RUNNING' for job in st.session_state[f'job_manager_{src}'].jobs_scheduled):
             fig, ax = plt.subplots(figsize=(8, 4))
             # ax.set_title(f'HPC{src+1}')
             ax.set_ylim(0, st.session_state['HPC_NODES'])
