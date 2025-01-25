@@ -15,14 +15,13 @@ class Job:
         self.start = start # starting time
         self.priority = priority # 1 for highest priority
         self.relapsed = rtime(elapsed) # real elapsed time
-        self.rstart = 0
-        self.end = 0
+        self.wait = 0 # add 1 until running starts
         self.status = 'ACCEPT'
         self.map = None # (col, row)
         self.timestamp = time.time()
         
     def __repr__(self):
-        return f'Job(src={self.src}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, elapsed={self.elapsed}, start={self.start}, priority={self.priority}, relapsed={self.relapsed}, status={self.status}, map={self.map}, timestamp={self.timestamp})'
+        return f'Job(src={self.src}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, elapsed={self.elapsed}, start={self.start}, priority={self.priority}, relapsed={self.relapsed}, wait={self.wait}, status={self.status}, map={self.map}, timestamp={self.timestamp})'
     
 
 class Semaphore:

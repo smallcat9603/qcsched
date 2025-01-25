@@ -161,8 +161,11 @@ def update_mapping_ideal(nsteps: int):
         # fill rightmost with 0
         st.session_state[f'job_manager_{src}'].sched_map[:, -nsteps:] = 0
 
-        # update job.map
         for job in st.session_state[f'job_manager_{src}'].jobs_scheduled:
+            # update job.start
+            job.start = max(0, job.start-nsteps)
+
+            # update job.map and job.status
             if job.status == 'RUNNING':
                 job.elapsed -= nsteps
                 if job.elapsed <= 0:
@@ -178,9 +181,12 @@ def update_mapping_ideal(nsteps: int):
                     job.elapsed = end
                 else: # start > 0, end > 0
                     job.map = (job.map[0]-nsteps, job.map[1])   
-
-            # update job.start
-            job.start = max(0, job.start-nsteps)
+                # update job.wait
+                job.wait += nsteps
+                if start < 0:
+                    job.wait += start 
+            elif job.status != 'FINISH':
+                job.wait += nsteps
 
     # update semaphore status for qc
     for i in range(st.session_state['NUM_QC']):
@@ -210,7 +216,7 @@ def update_mapping(nsteps: int):
             # update job.start
             job.start = max(0, job.start-nsteps) 
 
-            # update job.map
+            # update job.map and job.status
             if job.status == 'RUNNING':
                 job.elapsed = max(0, job.elapsed-nsteps)
                 job.relapsed = max(0, job.relapsed-nsteps)
@@ -237,6 +243,14 @@ def update_mapping(nsteps: int):
                     job.status = 'RUNNING'        
                     job.elapsed = end
                     job.relapsed = rend  
+
+                # update job.wait
+                job.wait += nsteps
+                if start < 0:
+                    job.wait += start 
+                    
+            elif job.status != 'FINISH':
+                job.wait += nsteps
 
         if fin_jobs:
             for job in fin_jobs:
