@@ -54,6 +54,7 @@ def show_submitted_jobs():
                 'Elapsed Time': job.elapsed,
                 'Real Elapsed Time': job.relapsed,
                 'Start Time': job.start,
+                # 'Info': job.info,
                 'Wait Time': job.wait,
                 'Priority': job.priority,
                 } for job in st.session_state[f'job_manager_{src}'].jobs_submitted]

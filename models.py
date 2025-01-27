@@ -15,6 +15,7 @@ class Job:
         self.start = start # starting time
         self.priority = priority # 1 for highest priority
         self.relapsed = rtime(elapsed) # real elapsed time
+        self.info = (elapsed, start, self.relapsed)
         self.wait = 0 # add 1 until running starts
         self.status = 'ACCEPT'
         self.map = None # (col, row)

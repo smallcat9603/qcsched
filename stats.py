@@ -53,17 +53,23 @@ def show_results():
     njobs = njobs_qc = 0
     wtime = []
     wtime_qc = []
+    rtime = []
+    rtime_qc = []
 
     for src in range(st.session_state['NUM_HPC']):
         njobs += len(st.session_state[f'job_manager_{src}'].jobs_submitted)
         for job in st.session_state[f'job_manager_{src}'].jobs_submitted:
             wtime.append(job.wait)
+            rtime.append(job.wait+job.info[2])
             if job.type.startswith('QC'):
                 njobs_qc += 1
                 wtime_qc.append(job.wait)
+                rtime_qc.append(job.wait+job.info[2])
     
     avg_wtime = round(np.mean(wtime), 1) if wtime else 0.0
     avg_wtime_qc = round(np.mean(wtime_qc), 1) if wtime_qc else 0.0  
+    avg_rtime = round(np.mean(rtime), 1) if rtime else 0.0
+    avg_rtime_qc = round(np.mean(rtime_qc), 1) if rtime_qc else 0.0
 
     st.header('Simulation Result')
     df = pd.DataFrame({
@@ -72,5 +78,7 @@ def show_results():
         'Num of HPC jobs': njobs - njobs_qc,
         'Avg wait time of all jobs': avg_wtime,
         'Avg wait time of QC jobs': avg_wtime_qc,
+        'Avg response time of all jobs': avg_rtime,
+        'Avg response time of QC jobs': avg_rtime_qc,        
     }.items(), columns=['Metric','Value'])
-    st.dataframe(df, hide_index=True) 
+    st.dataframe(df, hide_index=True)
