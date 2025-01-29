@@ -1,6 +1,6 @@
 #######################
 ####
-#### python3 gen_wo_rtime.py --> generate csv file
+#### python3 gen_jobs.py --> generate csv file
 ####
 #######################
 
@@ -39,8 +39,43 @@ prob_t48 = t48/njobs_t
 
 # parameters
 
-qc_ratio = 0.1
-nrows = 1000
+qc_ratio = 0.1 # ratio of qc jobs to all jobs
+nrows = 1000 # num of all jobs
+
+
+def cdf(data_list: list):
+    all_sum = sum(data_list)
+    cur_sum = 0
+    for prob in data_list:
+        cur_sum += prob
+        yield cur_sum/all_sum
+
+
+def rtime(elapsed: int) -> int:
+    # data from AXIES 2024 'スーパーコンピュータ WisteriaBDEC-01 における利用状況を考慮した運用の再検討'
+    exp_to_real_1, exp_to_real_1_5, exp_to_real_2, exp_to_real_5, exp_to_real_10, exp_to_real_50, exp_to_real_100, exp_to_real_500, exp_to_real_1000 = 26_942, 31_422, 68_526, 249_048, 328_095, 272_384, 21_913, 165_838, 16_621 
+    data_list = [exp_to_real_1000, exp_to_real_500, exp_to_real_100, exp_to_real_50, exp_to_real_10, exp_to_real_5, exp_to_real_2, exp_to_real_1_5, exp_to_real_1]
+    fin_1000, fin_500, fin_100, fin_50, fin_10, fin_5, fin_2, fin_1_5, fin_1 = cdf(data_list)
+
+    r = random.random()
+    if r < fin_1000:
+        return elapsed//1000 + 1
+    elif r < fin_500:
+        return elapsed//500 + 1
+    elif r < fin_100:
+        return elapsed//100 + 1
+    elif r < fin_50:
+        return elapsed//50 + 1
+    elif r < fin_10:
+        return elapsed//10 + 1
+    elif r < fin_5:
+        return elapsed//5 + 1
+    elif r < fin_2:
+        return elapsed//2 + 1
+    elif r < fin_1_5:
+        return elapsed*2//3 + 1
+    elif r < fin_1:
+        return elapsed
 
 
 def generate_job():
@@ -52,16 +87,17 @@ def generate_job():
                             [prob_t1, prob_t6, prob_t12, prob_t18, prob_t24, prob_t30, prob_t36, prob_t42, prob_t48])[0]
     start = random.randint(0, 24)
     priority = random.randint(1, 5)
+    relapsed = rtime(elapsed)
     
-    return [hpc, type, nnodes, elapsed, start, priority]
+    return [hpc, type, nnodes, elapsed, start, priority, relapsed]
 
 
 def generate_csv():
     data = [generate_job() for _ in range(nrows)]
-    df = pd.DataFrame(data, columns=['HPC', 'Type', 'Nodes', 'Time', 'Start', 'Priority'])
+    df = pd.DataFrame(data, columns=['HPC', 'Type', 'Nodes', 'Time', 'Start', 'Priority', 'rTime'])
     now = datetime.datetime.now()
     timestamp = now.strftime("%Y%m%d%H%M")
-    df.to_csv(f'wor_{timestamp}.txt', index=False, header=False)
+    df.to_csv(f'JOBS_{timestamp}.txt', index=False, header=False)
 
 
 generate_csv()
