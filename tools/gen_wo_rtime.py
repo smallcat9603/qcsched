@@ -1,6 +1,6 @@
 #######################
 ####
-#### python3 gen.py --> generate csv file
+#### python3 gen_wo_rtime.py --> generate csv file
 ####
 #######################
 
@@ -48,12 +48,12 @@ def generate_job():
     type = random.choices(['HPC', 'QC1', 'QC2'], [1-qc_ratio, qc_ratio/2, qc_ratio/2])[0]
     nnodes = random.choices([1, 2, 4, 8, 16, 32, 64, 128, 256], 
                             [prob_n1, prob_n2, prob_n4, prob_n8, prob_n16, prob_n32, prob_n64, prob_n128, prob_n256])[0]
-    etime = random.choices([1, 6, 12, 18, 24, 30, 36, 42, 48], 
+    elapsed = random.choices([1, 6, 12, 18, 24, 30, 36, 42, 48], 
                             [prob_t1, prob_t6, prob_t12, prob_t18, prob_t24, prob_t30, prob_t36, prob_t42, prob_t48])[0]
     start = random.randint(0, 24)
     priority = random.randint(1, 5)
     
-    return [hpc, type, nnodes, etime, start, priority]
+    return [hpc, type, nnodes, elapsed, start, priority]
 
 
 def generate_csv():
@@ -61,7 +61,7 @@ def generate_csv():
     df = pd.DataFrame(data, columns=['HPC', 'Type', 'Nodes', 'Time', 'Start', 'Priority'])
     now = datetime.datetime.now()
     timestamp = now.strftime("%Y%m%d%H%M")
-    df.to_csv(f'jobs_{timestamp}.txt', index=False, header=False)
+    df.to_csv(f'wor_{timestamp}.txt', index=False, header=False)
 
 
 generate_csv()
