@@ -89,7 +89,7 @@ def cdf(data_list: list):
         yield cur_sum/all_sum
 
 
-def rtime(elapsed: int) -> int:
+def rtime(elapsed: int) -> int: # get real elapsed time according to expected elapsed time
     # data from AXIES 2024 'スーパーコンピュータ WisteriaBDEC-01 における利用状況を考慮した運用の再検討'
     exp_to_real_1, exp_to_real_1_5, exp_to_real_2, exp_to_real_5, exp_to_real_10, exp_to_real_50, exp_to_real_100, exp_to_real_500, exp_to_real_1000 = 26_942, 31_422, 68_526, 249_048, 328_095, 272_384, 21_913, 165_838, 16_621 
     data_list = [exp_to_real_1000, exp_to_real_500, exp_to_real_100, exp_to_real_50, exp_to_real_10, exp_to_real_5, exp_to_real_2, exp_to_real_1_5, exp_to_real_1]
