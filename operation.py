@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 from models import Job, Semaphore, JobManager
-from utils import get_num_from_0, get_id, get_vid
+from utils import get_num_from_0, get_id, get_vid, rtime
 
 
 def init(mode):
@@ -20,7 +20,7 @@ def init(mode):
             st.session_state[f'job_manager_{src}'] = JobManager() 
 
 
-def append_job(src: int, type: str, nnodes: int, elapsed: int, start: int, priority: int):
+def append_job(src: int, type: str, nnodes: int, elapsed: int, start: int, priority: int, relapsed: int):
     id = get_id(src, type)
     vid = get_vid(src)
 
@@ -32,7 +32,8 @@ def append_job(src: int, type: str, nnodes: int, elapsed: int, start: int, prior
                                                                         nnodes=nnodes, 
                                                                         elapsed=elapsed, 
                                                                         start=start, 
-                                                                        priority=priority))
+                                                                        priority=priority,
+                                                                        relapsed=relapsed))
 
 
 @st.cache_data
@@ -46,23 +47,29 @@ def import_file(uploaded_file):
         start = int(row[4])
         priority = int(row[5]) 
 
+        relapsed = int(row[6]) if len(row) > 6 else rtime(elapsed)
+
         append_job(src=src, 
                 type=type, 
                 nnodes=nnodes, 
                 elapsed=elapsed,
                 start=start,
-                priority=priority)
+                priority=priority,
+                relapsed=relapsed)
 
 
 def submit(hpc: str, type: str, nnodes: int, elapsed: int, start: int, priority: int):
     src = get_num_from_0(hpc) 
+
+    relapsed = rtime(elapsed)
 
     append_job(src=src, 
                type=type, 
                nnodes=nnodes, 
                elapsed=elapsed,
                start=start,
-               priority=priority)
+               priority=priority,
+               relapsed=relapsed)
     
 
 def suspend(job: Job):

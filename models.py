@@ -2,10 +2,9 @@ import streamlit as st
 import numpy as np
 import time
 
-from utils import rtime
 
 class Job:
-    def __init__(self, src: int, id: str, vid: str, type: str, nnodes: int, elapsed: int, start: int, priority: int):
+    def __init__(self, src: int, id: str, vid: str, type: str, nnodes: int, elapsed: int, start: int, priority: int, relapsed: int):
         self.src = src # 0 (HPC1), 1 (HPC2), 2 (HPC3)
         self.id = id # for node mapping use, can identify qc job or not
         self.vid = vid # for display, cannot identify qc job or not
@@ -14,7 +13,7 @@ class Job:
         self.elapsed = elapsed # expected elasped time
         self.start = start # starting time
         self.priority = priority # 1 for highest priority
-        self.relapsed = rtime(elapsed) # real elapsed time
+        self.relapsed = relapsed # real elapsed time
         self.info = (elapsed, start, self.relapsed)
         self.wait = 0 # add 1 until running starts
         self.status = 'ACCEPT'
