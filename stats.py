@@ -50,11 +50,17 @@ def show_statistics():
 
 
 def show_results():
-    njobs = njobs_qc = 0
+    njobs = njobs_qc = njobs_qc_priority_1 = njobs_qc_priority_2 = njobs_qc_priority_3 = 0
     wtime = []
     wtime_qc = []
+    wtime_qc_priority_1 = []
+    wtime_qc_priority_2 = []
+    wtime_qc_priority_3 = []
     rtime = []
     rtime_qc = []
+    rtime_qc_priority_1 = []
+    rtime_qc_priority_2 = []
+    rtime_qc_priority_3 = []
 
     for src in range(st.session_state['NUM_HPC']):
         njobs += len(st.session_state[f'job_manager_{src}'].jobs_submitted)
@@ -65,11 +71,29 @@ def show_results():
                 njobs_qc += 1
                 wtime_qc.append(job.wait)
                 rtime_qc.append(job.wait+job.info[2])
+                if job.priority == 1:
+                    njobs_qc_priority_1 += 1
+                    wtime_qc_priority_1.append(job.wait)
+                    rtime_qc_priority_1.append(job.wait+job.info[2])
+                if job.priority <= 2:
+                    njobs_qc_priority_2 += 1
+                    wtime_qc_priority_2.append(job.wait)
+                    rtime_qc_priority_2.append(job.wait+job.info[2])        
+                if job.priority <= 3:
+                    njobs_qc_priority_3 += 1
+                    wtime_qc_priority_3.append(job.wait)
+                    rtime_qc_priority_3.append(job.wait+job.info[2])
     
     avg_wtime = round(np.mean(wtime), 1) if wtime else 0.0
     avg_wtime_qc = round(np.mean(wtime_qc), 1) if wtime_qc else 0.0  
+    avg_wtime_qc_priority_1 = round(np.mean(wtime_qc_priority_1), 1) if wtime_qc_priority_1 else 0.0
+    avg_wtime_qc_priority_2 = round(np.mean(wtime_qc_priority_2), 1) if wtime_qc_priority_2 else 0.0
+    avg_wtime_qc_priority_3 = round(np.mean(wtime_qc_priority_3), 1) if wtime_qc_priority_3 else 0.0
     avg_rtime = round(np.mean(rtime), 1) if rtime else 0.0
     avg_rtime_qc = round(np.mean(rtime_qc), 1) if rtime_qc else 0.0
+    avg_rtime_qc_priority_1 = round(np.mean(rtime_qc_priority_1), 1) if rtime_qc_priority_1 else 0.0
+    avg_rtime_qc_priority_2 = round(np.mean(rtime_qc_priority_2), 1) if rtime_qc_priority_2 else 0.0
+    avg_rtime_qc_priority_3 = round(np.mean(rtime_qc_priority_3), 1) if rtime_qc_priority_3 else 0.0
 
     st.header('Simulation Result')
     df = pd.DataFrame({
@@ -78,7 +102,13 @@ def show_results():
         'Num of HPC jobs': njobs - njobs_qc,
         'Avg wait time of all jobs': avg_wtime,
         'Avg wait time of QC jobs': avg_wtime_qc,
+        'Avg wait time of QC (Priority=1) jobs': avg_wtime_qc_priority_1,
+        'Avg wait time of QC (Priority<=2) jobs': avg_wtime_qc_priority_2,
+        'Avg wait time of QC (Priority<=3) jobs': avg_wtime_qc_priority_3,
         'Avg response time of all jobs': avg_rtime,
-        'Avg response time of QC jobs': avg_rtime_qc,        
+        'Avg response time of QC jobs': avg_rtime_qc, 
+        'Avg response time of QC (Priority=1) jobs': avg_rtime_qc_priority_1,
+        'Avg response time of QC (Priority<=2) jobs': avg_rtime_qc_priority_2,
+        'Avg response time of QC (Priority<=3) jobs': avg_rtime_qc_priority_3,
     }.items(), columns=['Metric','Value'])
     st.dataframe(df, hide_index=True)
