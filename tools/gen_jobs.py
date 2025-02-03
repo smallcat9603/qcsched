@@ -54,7 +54,7 @@ prob_1000 = exp_to_real_1000/total
 
 # parameters
 
-qc_ratio = 0.1 # ratio of qc jobs to all jobs
+qc_ratio = 0.05 # ratio of qc jobs to all jobs
 nrows = 1000 # num of all jobs
 
 def generate_job():
@@ -79,7 +79,7 @@ def generate_csv():
     df = pd.DataFrame(data, columns=['HPC', 'Type', 'Nodes', 'Time', 'Start', 'Priority', 'rTime'])
     now = datetime.datetime.now()
     timestamp = now.strftime("%Y%m%d%H%M")
-    df.to_csv(f'JOBS_{timestamp}.txt', index=False, header=False)
+    df.to_csv(f'JOBS_qc005_{timestamp}.txt', index=False, header=False)
 
 
 generate_csv()
