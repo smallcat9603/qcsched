@@ -90,9 +90,9 @@ def run():
 
         if st.sidebar.button(label='Simulate', type='primary'):
             simulate(algo, resched)
-            st.rerun()
 
-        show_results()
+            show_results()
+
 
 if __name__=='__main__':
     run()
