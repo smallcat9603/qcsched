@@ -28,7 +28,7 @@ def plot_qc(mode):
                 rect = patches.Rectangle((util[0], 0), util[1], 1, edgecolor='black', facecolor=fc)
                 ax.add_patch(rect)
                 if mode == 'Demo':
-                    ax.text(util[0]+util[1]/2, 1/2, f'{st.session_state['semaphore'].qc_flag[qc][util[0]]}', size=10, horizontalalignment='center', verticalalignment='center')   
+                    ax.text(util[0]+util[1]/2, 1/2, f"{st.session_state['semaphore'].qc_flag[qc][util[0]]}", size=10, horizontalalignment='center', verticalalignment='center')   
 
             st.header(f'QC{qc+1} Schedule')
             st.pyplot(fig) 
