@@ -50,73 +50,64 @@ def show_statistics():
 
 
 def show_results():
-    njobs = njobs_qc = njobs_qc_priority_1 = njobs_qc_priority_2 = njobs_qc_priority_3 = 0
-    wtime = []
-    wtime_qc = []
-    wtime_qc_priority_1 = []
-    wtime_qc_priority_2 = []
-    wtime_qc_priority_3 = []
-    rtime = []
-    rtime_qc = []
-    rtime_qc_priority_1 = []
-    rtime_qc_priority_2 = []
-    rtime_qc_priority_3 = []
+    wtime_hpc = [[] for _ in range(5)]
+    wtime_qc = [[] for _ in range(5)]
+    rtime_hpc = [[] for _ in range(5)]
+    rtime_qc = [[] for _ in range(5)]
 
     for src in range(st.session_state['NUM_HPC']):
-        njobs += len(st.session_state[f'job_manager_{src}'].jobs_submitted)
         for job in st.session_state[f'job_manager_{src}'].jobs_submitted:
-            wtime.append(job.wait)
-            rtime.append(job.wait+job.info[2])
             if job.type.startswith('QC'):
-                njobs_qc += 1
-                wtime_qc.append(job.wait)
-                rtime_qc.append(job.wait+job.info[2])
-                if job.priority == 1:
-                    njobs_qc_priority_1 += 1
-                    wtime_qc_priority_1.append(job.wait)
-                    rtime_qc_priority_1.append(job.wait+job.info[2])
-                if job.priority <= 2:
-                    njobs_qc_priority_2 += 1
-                    wtime_qc_priority_2.append(job.wait)
-                    rtime_qc_priority_2.append(job.wait+job.info[2])        
-                if job.priority <= 3:
-                    njobs_qc_priority_3 += 1
-                    wtime_qc_priority_3.append(job.wait)
-                    rtime_qc_priority_3.append(job.wait+job.info[2])
+                wtime_qc[job.priority-1].append(job.wait)
+                rtime_qc[job.priority-1].append(job.wait+job.info[2])
+            else:
+                wtime_hpc[job.priority-1].append(job.wait)
+                rtime_hpc[job.priority-1].append(job.wait+job.info[2])
+
+    wtime_hpc_list = [element for sublist in wtime_hpc for element in sublist]
+    wtime_qc_list = [element for sublist in wtime_qc for element in sublist]
+    rtime_hpc_list = [element for sublist in rtime_hpc for element in sublist]
+    rtime_qc_list = [element for sublist in rtime_qc for element in sublist]
     
-    avg_wtime = round(np.mean(wtime), 1) if wtime else 0.0
-    avg_wtime_qc = round(np.mean(wtime_qc), 1) if wtime_qc else 0.0  
-    avg_wtime_qc_priority_1 = round(np.mean(wtime_qc_priority_1), 1) if wtime_qc_priority_1 else 0.0
-    avg_wtime_qc_priority_2 = round(np.mean(wtime_qc_priority_2), 1) if wtime_qc_priority_2 else 0.0
-    avg_wtime_qc_priority_3 = round(np.mean(wtime_qc_priority_3), 1) if wtime_qc_priority_3 else 0.0
-    avg_rtime = round(np.mean(rtime), 1) if rtime else 0.0
-    avg_rtime_qc = round(np.mean(rtime_qc), 1) if rtime_qc else 0.0
-    avg_rtime_qc_priority_1 = round(np.mean(rtime_qc_priority_1), 1) if rtime_qc_priority_1 else 0.0
-    avg_rtime_qc_priority_2 = round(np.mean(rtime_qc_priority_2), 1) if rtime_qc_priority_2 else 0.0
-    avg_rtime_qc_priority_3 = round(np.mean(rtime_qc_priority_3), 1) if rtime_qc_priority_3 else 0.0
+    avg_wtime_hpc = float(round(np.mean(wtime_hpc_list), 1)) if wtime_hpc_list else 0.0
+    avg_wtime_qc = float(round(np.mean(wtime_qc_list), 1)) if wtime_qc_list else 0.0 
+
+    avg_rtime_hpc = float(round(np.mean(rtime_hpc_list), 1)) if rtime_hpc_list else 0.0
+    avg_rtime_qc = float(round(np.mean(rtime_qc_list), 1)) if rtime_qc_list else 0.0
+
 
     st.header('Simulation Result')
     df = pd.DataFrame({
-        'Num of all jobs': njobs,
-        'Num of QC jobs': njobs_qc,
-        'Num of HPC jobs': njobs - njobs_qc,
-        'Avg wait time of all jobs': avg_wtime,
-        'Avg wait time of QC jobs': avg_wtime_qc,
-        'Max wait time of QC jobs': np.max(wtime_qc),
-        'Avg wait time of QC (Priority=1) jobs': avg_wtime_qc_priority_1,
-        'Max wait time of QC (Priority=1) jobs': np.max(wtime_qc_priority_1),
-        'Avg wait time of QC (Priority<=2) jobs': avg_wtime_qc_priority_2,
-        'Max wait time of QC (Priority<=2) jobs': np.max(wtime_qc_priority_2),
-        'Avg wait time of QC (Priority<=3) jobs': avg_wtime_qc_priority_3,
-        'Max wait time of QC (Priority<=3) jobs': np.max(wtime_qc_priority_3),
-        'Avg response time of all jobs': avg_rtime,
-        'Avg response time of QC jobs': avg_rtime_qc, 
-        'Max response time of QC jobs': np.max(rtime_qc), 
-        'Avg response time of QC (Priority=1) jobs': avg_rtime_qc_priority_1,
-        'Max response time of QC (Priority=1) jobs': np.max(rtime_qc_priority_1),
-        'Avg response time of QC (Priority<=2) jobs': avg_rtime_qc_priority_2,
-        'Max response time of QC (Priority<=2) jobs': np.max(rtime_qc_priority_2),
-        'Avg response time of QC (Priority<=3) jobs': avg_rtime_qc_priority_3,
-        'Max response time of QC (Priority<=3) jobs': np.max(rtime_qc_priority_3),
+        'Num of All jobs': len(wtime_hpc_list) + len(wtime_qc_list),
+        'Num of HPC jobs': len(wtime_hpc_list),
+        'Num of QC jobs': len(wtime_qc_list),
+
+        'Wait time of HPC jobs': (min(wtime_hpc_list), avg_wtime_hpc, max(wtime_hpc_list)),
+        'Wait time of HPC (Priority=1) jobs': (min(wtime_hpc[0]), round(sum(wtime_hpc[0])/len(wtime_hpc[0]), 1), max(wtime_hpc[0]), wtime_hpc[0]),
+        'Wait time of HPC (Priority=2) jobs': (min(wtime_hpc[1]), round(sum(wtime_hpc[1])/len(wtime_hpc[1]), 1), max(wtime_hpc[1]), wtime_hpc[1]),
+        'Wait time of HPC (Priority=3) jobs': (min(wtime_hpc[2]), round(sum(wtime_hpc[2])/len(wtime_hpc[2]), 1), max(wtime_hpc[2]), wtime_hpc[2]),
+        'Wait time of HPC (Priority=4) jobs': (min(wtime_hpc[3]), round(sum(wtime_hpc[3])/len(wtime_hpc[3]), 1), max(wtime_hpc[3]), wtime_hpc[3]),
+        'Wait time of HPC (Priority=5) jobs': (min(wtime_hpc[4]), round(sum(wtime_hpc[4])/len(wtime_hpc[4]), 1), max(wtime_hpc[4]), wtime_hpc[4]),
+
+        'Wait time of QC jobs': (min(wtime_qc_list), avg_wtime_qc, max(wtime_qc_list)),
+        'Wait time of QC (Priority=1) jobs': (min(wtime_qc[0]), round(sum(wtime_qc[0])/len(wtime_qc[0]), 1), max(wtime_qc[0]), wtime_qc[0]),
+        'Wait time of QC (Priority=2) jobs': (min(wtime_qc[1]), round(sum(wtime_qc[1])/len(wtime_qc[1]), 1), max(wtime_qc[1]), wtime_qc[1]),
+        'Wait time of QC (Priority=3) jobs': (min(wtime_qc[2]), round(sum(wtime_qc[2])/len(wtime_qc[2]), 1), max(wtime_qc[2]), wtime_qc[2]),
+        'Wait time of QC (Priority=4) jobs': (min(wtime_qc[3]), round(sum(wtime_qc[3])/len(wtime_qc[3]), 1), max(wtime_qc[3]), wtime_qc[3]),
+        'Wait time of QC (Priority=5) jobs': (min(wtime_qc[4]), round(sum(wtime_qc[4])/len(wtime_qc[4]), 1), max(wtime_qc[4]), wtime_qc[4]),
+
+        'Response time of HPC jobs': (min(rtime_hpc_list), avg_rtime_hpc, max(rtime_hpc_list)),
+        'Response time of HPC (Priority=1) jobs': (min(rtime_hpc[0]), round(sum(rtime_hpc[0])/len(rtime_hpc[0]), 1), max(rtime_hpc[0]), rtime_hpc[0]),
+        'Response time of HPC (Priority=2) jobs': (min(rtime_hpc[1]), round(sum(rtime_hpc[1])/len(rtime_hpc[1]), 1), max(rtime_hpc[1]), rtime_hpc[1]),
+        'Response time of HPC (Priority=3) jobs': (min(rtime_hpc[2]), round(sum(rtime_hpc[2])/len(rtime_hpc[2]), 1), max(rtime_hpc[2]), rtime_hpc[2]),
+        'Response time of HPC (Priority=4) jobs': (min(rtime_hpc[3]), round(sum(rtime_hpc[3])/len(rtime_hpc[3]), 1), max(rtime_hpc[3]), rtime_hpc[3]),
+        'Response time of HPC (Priority=5) jobs': (min(rtime_hpc[4]), round(sum(rtime_hpc[4])/len(rtime_hpc[4]), 1), max(rtime_hpc[4]), rtime_hpc[4]),
+
+        'Response time of QC jobs': (min(rtime_qc_list), avg_rtime_qc, max(rtime_qc_list)),
+        'Response time of QC (Priority=1) jobs': (min(rtime_qc[0]), round(sum(rtime_qc[0])/len(rtime_qc[0]), 1), max(rtime_qc[0]), rtime_qc[0]),
+        'Response time of QC (Priority=2) jobs': (min(rtime_qc[1]), round(sum(rtime_qc[1])/len(rtime_qc[1]), 1), max(rtime_qc[1]), rtime_qc[1]),
+        'Response time of QC (Priority=3) jobs': (min(rtime_qc[2]), round(sum(rtime_qc[2])/len(rtime_qc[2]), 1), max(rtime_qc[2]), rtime_qc[2]),
+        'Response time of QC (Priority=4) jobs': (min(rtime_qc[3]), round(sum(rtime_qc[3])/len(rtime_qc[3]), 1), max(rtime_qc[3]), rtime_qc[3]),
+        'Response time of QC (Priority=5) jobs': (min(rtime_qc[4]), round(sum(rtime_qc[4])/len(rtime_qc[4]), 1), max(rtime_qc[4]), rtime_qc[4]),
     }.items(), columns=['Metric','Value'])
     st.dataframe(df, hide_index=True)
