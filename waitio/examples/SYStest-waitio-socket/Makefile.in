@@ -1,0 +1,24 @@
+# before compilation, do not forget "module load metis/4.0.3" for methis 
+INSTALL_DIR = /work/share/
+
+# IMPIBASE = /home/opt/local/cores/intel/impi/2019.9.304/intel64/ #obcx
+# IMPIBASE = /work/opt/local/x86_64/cores/intel/2021.2.0/mpi/2021.2.0 # old
+IMPIBASE = /work/opt/local/x86_64/cores/intel/2023.0.0/mpi/2021.8.0/
+CC2     =  $(IMPIBASE)/bin/mpiicc
+FC2     =  /work/opt/local/x86_64/cores/intel/2021.2.0/compiler/2021.2.0/linux/bin/intel64/ifort
+F90     = $(IMPIBASE)/bin/mpiifort
+OPTFLAGS  = -align array64byte -O3 -g -axCORE-AVX512
+WAITIO_INC = $(INSTALL_DIR)/waitio/include/
+WAITIO_LIB = $(INSTALL_DIR)/waitio/lib/
+F90OPT= $(OPTFLAGS) -I${WAITIO_INC}
+LOPT  = $(OPTFLAGS)
+
+FC2=/opt/FJSVxtclanga/tcsds-1.2.31/bin/mpifrtpx
+FFLAGS2    =   -Kfast -DTOFU -g -Kopenmp -I${WAITIO_INC}
+LDFLAGS2    =  -Kfast -g -Kopenmp
+LOPT2  =  -O3 -Kopenmp
+INCLUDE   = -I${WAITIO_INC}
+
+WAITIOLIBS	= -L${WAITIO_LIB} -lwaitio_intel -lwaitio_mpi_intel
+WAITIOLIBS2	= -L${WAITIO_LIB} -lwaitio_a64fx -lwaitio_mpi_a64fx
+
