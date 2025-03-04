@@ -10,4 +10,4 @@
 
 #------- Program execution -------#
 module load gcc ompi
-mpiexec -machinefile $PJM_O_NODEINF -n $PJM_MPI_PROC -npernode 2 /work/gz00/z30130/mpi/app/bin/lu 1024
+mpiexec -machinefile $PJM_O_NODEINF -n $PJM_MPI_PROC -npernode 2 /work/gz00/z30130/mpi/app/bin/lu.a 1024

@@ -9,4 +9,4 @@
 #PJM -j
 
 #------- Program execution -------#
-mpiexec /work/gz00/z30130/mpi/app/bin/lu 1024
+mpiexec /work/gz00/z30130/mpi/app/bin/lu.o 1024
