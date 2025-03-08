@@ -1,1 +1,2 @@
-1,/work/gz00/z30130/qcsched/app/pj/lu.o.p16.n8.qc-hpc-a-p-o.sh,/work/gz00/z30130/qcsched/app/pj/lu.o.p16.n8.qc-hpc-b-p-o.sh
+2,/work/gz00/z30130/qcsched/app/pj/hpc-a-h.sh,/work/gz00/z30130/qcsched/app/pj/qc-ibm.sh
+1,/work/gz00/z30130/qcsched/app/pj/hpc-a-h.sh,/work/gz00/z30130/qcsched/app/pj/hpc-a-s.sh,/work/gz00/z30130/qcsched/app/pj/qc-ibm.sh

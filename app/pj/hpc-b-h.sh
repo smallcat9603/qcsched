@@ -2,8 +2,8 @@
 
 #------ pjsub option --------#
 #PJM -L rscgrp=qc-hpc-b-p-o
-#PJM -L node=2x4:torus
-#PJM --mpi proc=16
+#PJM -L node=2
+#PJM --mpi proc=4
 #PJM -L elapse=1:00:00
 #PJM -g gz00
 #PJM -j
