@@ -21,7 +21,7 @@ class Job:
         return f'Job(rscgroup={self.rscgroup}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, elapsed={self.elapsed}, priority={self.priority}, relapsed={self.relapsed}, wait={self.wait}, status={self.status}, timestamp={self.timestamp})'
 
 
-def import_joblist(filename):
+def import_joblist(filename: str):
     joblist = []
     id = 0
     vid = 100000
@@ -57,6 +57,14 @@ def import_joblist(filename):
 
 def sort_key_qc(subjoblist: list[Job]):
     return (subjoblist[0].type, subjoblist[0].priority, subjoblist[0].id)
+
+def submit(subjoblist: list[Job]):
+    for job in subjoblist:
+        if 'ibm-' in job.rscgroup:
+            # uri = f"PYRO:HPC-Job@{host}:{port}"
+            # server = Pyro5.client.Proxy(uri)
+            # t = int(input("The time of the HPC job? ").strip())
+            # print(server.run(t))
 
 joblist = import_joblist('test.txt')
 joblist.sort(key=sort_key_qc)
