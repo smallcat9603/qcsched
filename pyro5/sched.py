@@ -1,6 +1,5 @@
 import Pyro5.api
 import platform
-import pandas as pd
 import time
 
 
@@ -23,27 +22,15 @@ class Job:
     
 
 class Sched:
-    def __init__(self):
-        uname = platform.uname()
-        system = uname[0]
-        node = uname[1]
-        release = uname[2]
-
-        host_hpc = '192.168.3.69' if 'raspberrypi' in node else 'localhost'
-        host_qc = '192.168.3.80' if 'raspberrypi' in node else 'localhost'
-        port_hpc = 9091
-        port_qc = 9092
-
-        uri_qc = f"PYRO:QC-Job@{host_qc}:{port_qc}"
-        uri_hpc = f"PYRO:HPC-Job@{host_hpc}:{port_hpc}"
-
-        self.server_qc = Pyro5.client.Proxy(uri_qc)
-        self.server_hpc = Pyro5.client.Proxy(uri_hpc)
+    def __init__(self, uri_qc: str, uri_hpc: str):
+        self.uri_qc = uri_qc
+        self.uri_hpc = uri_hpc
 
         self.ibm_semaphor = 1
         self.quan_semaphor = 1
 
-        self.joblist = []
+        self.joblist_unsorted = []
+        self.joblist_sorted = []
 
     def sort_key_qc(self, subjoblist: list[Job]):
         return (subjoblist[0].type, subjoblist[0].priority, subjoblist[0].id)   
@@ -51,16 +38,20 @@ class Sched:
     def run(self, subjoblist: list[Job]):
         for job in subjoblist:
             job.status = 'RUNNING'
-            if 'ibm-' or 'quan-' in job.rscgroup:
-                self.server_qc.run(job.vid, job.relapsed) 
+            
+            if 'ibm-' in job.rscgroup or 'quan-' in job.rscgroup:
+                server_qc = Pyro5.client.Proxy(self.uri_qc)
+                server_qc.run(job.vid, job.relapsed)
             else:
-                self.server_hpc.run(job.vid, job.relapsed)  
+                server_hpc = Pyro5.client.Proxy(self.uri_hpc)
+                server_hpc.run(job.vid, job.relapsed)  
 
-    def queue(self, subjoblist: list[Job]):
+    def hold(self, subjoblist: list[Job]):
         for job in subjoblist:     
             job.status = 'HOLD'     
 
     @Pyro5.server.expose
+    @Pyro5.server.oneway
     def submit_joblist(self, filename: str):
         id = 0
         vid = 100000
@@ -72,6 +63,7 @@ class Sched:
                 id += 1
                 subjoblist = []
                 type = 0
+                nnodes = 1
                 for i in range(1, len(row)):
                     if i == 1 and 'hpc-' in row[i]:
                         type = 1
@@ -79,47 +71,78 @@ class Sched:
                     rscgroup = ''
                     if 'hpc-a-' in row[i]:
                         rscgroup = 'qc-hpc-a-m-o'
+                        nnodes = int(row[i].split('-')[-2])
                     elif 'hpc-b-' in row[i]:
                         rscgroup = 'qc-hpc-b-m-o'
+                        nnodes = int(row[i].split('-')[-2])
                     elif 'hpc-c-' in row[i]:
                         rscgroup = 'qc-hpc-c-m-o'
+                        nnodes = int(row[i].split('-')[-2])
                     elif 'ibm-' in row[i]:
                         rscgroup = 'qc-hpc-ibm-a'
                     elif 'quan-' in row[i]:
                         rscgroup = 'qc-hpc-quan-a'
-                    nnodes = row[i].split('-')[-2]
-                    elapsed = row[i].split('-')[-1]
+                    
+                    elapsed = int(row[i].split('-')[-1])
                     relapsed = elapsed
                     subjoblist.append(Job(rscgroup=rscgroup, id=id, vid=vid, type=type, nnodes=nnodes, elapsed=elapsed, priority=priority, relapsed=relapsed))
-                self.joblist.append(subjoblist)
+                self.joblist_unsorted.append(subjoblist)
 
-        self.joblist.sort(key=self.sort_key_qc)
+                job_vids = [job.vid for job in subjoblist]
+                vids = ', '.join(map(str, job_vids))
+                print(f'The jobs were submitted: {vids}')
 
-        for subjoblist in self.joblist:
-            job_vids = [job.vid for job in subjoblist]
-            vids = ', '.join(map(str, job_vids))
-            print(f'The jobs were submitted: {vids}')
-            if 'ibm-' in subjoblist[0].rscgroup:
-                if ibm_semaphor:
-                    self.run(subjoblist)
-                    ibm_semaphor = 0
-                else:
-                    self.queue(subjoblist)
-            elif 'quan-' in subjoblist[0].rscgroup:
-                if quan_semaphor:
-                    self.run(subjoblist)
-                    quan_semaphor = 0
-                else:
-                    self.queue(subjoblist)
-            else:
-                self.run(subjoblist)
+        self.joblist_sorted = self.joblist_unsorted.copy()
+        self.joblist_sorted.sort(key=self.sort_key_qc)
+
+        while True:
+            has_unfinished = False
+            for subjoblist in self.joblist_sorted:
+                first_sub_job = subjoblist[0] # a qc sub job must be subjoblist[0]
+                if first_sub_job.status == 'ACCEPT' or first_sub_job.status == 'HOLD':
+                    has_unfinished = True
+                    if 'ibm-' in first_sub_job.rscgroup: 
+                        if self.ibm_semaphor:
+                            self.run(subjoblist)
+                            self.ibm_semaphor = 0
+                        else:
+                            self.hold(subjoblist)
+                    elif 'quan-' in first_sub_job.rscgroup:
+                        if self.quan_semaphor:
+                            self.run(subjoblist)
+                            self.quan_semaphor = 0
+                        else:
+                            self.hold(subjoblist)
+                    else:
+                        self.run(subjoblist)
+            if not has_unfinished:
+                break
 
     @Pyro5.server.expose
     def finish(self, vid):    
-        for subjoblist in self.joblist:
+        for subjoblist in self.joblist_sorted:
             for job in subjoblist:
                 if vid == job.vid:
-                    job.status = 'FINISH'  
+                    job.status = 'FINISH'
+                    if 'ibm-' in job.rscgroup:
+                        self.ibm_semaphor = 1
+                    elif 'quan-' in job.rscgroup:
+                        self.quan_semaphor = 1
+
+
+    @Pyro5.server.expose
+    def stat_job_status(self):   
+        job_status = {}
+        for subjoblist in self.joblist_unsorted:
+            for job in subjoblist:
+                job_status[job.vid] = job.status
+        return job_status   
+
+
+    @Pyro5.server.expose
+    def stat_qc_semaphor(self):   
+        return f'ibm_semaphor: {self.ibm_semaphor}, quan_semaphor: {self.quan_semaphor}'     
+
 
 def main():   
 
@@ -128,11 +151,20 @@ def main():
     node = uname[1]
     release = uname[2]   
 
+    host_hpc = '192.168.3.69' if 'raspberrypi' in node else 'localhost'
+    host_qc = '192.168.3.80' if 'raspberrypi' in node else 'localhost'
+    port_hpc = 9091
+    port_qc = 9092
+
+    uri_qc = f"PYRO:qc@{host_qc}:{port_qc}"
+    uri_hpc = f"PYRO:hpc@{host_hpc}:{port_hpc}"  
+
     host = '192.168.3.13' if 'raspberrypi' in node else None
-    port = 9093
+    port = 9093  
 
     daemon = Pyro5.api.Daemon(host=host, port=port)
-    uri = daemon.register(Sched, objectId="Sched")
+    sched = Sched(uri_qc, uri_hpc)
+    uri = daemon.register(sched, objectId="sched")
     print("Scheduler running ...")
     daemon.requestLoop()
 

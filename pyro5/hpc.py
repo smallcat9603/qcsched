@@ -1,16 +1,23 @@
 import Pyro5.api
 import time
 import platform
+import threading
 
-class Jobs(object):
+class HPC():
+    def __init__(self, uri_sched: str):
+        self.uri_sched = uri_sched
+
+    def run_threaded(self, vid: int, t: int):
+        time.sleep(t)
+        server_sched = Pyro5.client.Proxy(self.uri_sched)
+        server_sched.finish(vid)
 
     @Pyro5.server.expose
     @Pyro5.server.oneway
-    def run(self, vid, t):
-        time.sleep(t)
+    def run(self, vid: int, t: int):
+        thread = threading.Thread(target=self.run_threaded, args=[vid, t])
+        thread.start()
         
-        # return "HPC-Job finished."
-
     
 def main():
     uname = platform.uname()
@@ -19,11 +26,16 @@ def main():
     node = uname[1]
     release = uname[2]
 
+    host_sched = '192.168.3.13' if 'raspberrypi' in node else 'localhost'
+    port_sched = 9093
+    uri_sched = f"PYRO:sched@{host_sched}:{port_sched}"
+
     host = '192.168.3.69' if 'raspberrypi' in node else None
     port = 9091
 
     daemon = Pyro5.api.Daemon(host=host, port=port)
-    uri = daemon.register(Jobs, objectId="HPC-Job")
+    hpc = HPC(uri_sched)
+    uri = daemon.register(hpc, objectId="hpc")
     print("HPC running ...")
     daemon.requestLoop()
 

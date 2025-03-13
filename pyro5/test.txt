@@ -1,3 +1,5 @@
 2,hpc-b-3-2
-1,ibm-3-5,hpc-a-4-6
-3,quan-5-3,hpc-c-4-1
+1,ibm-2,hpc-a-4-2
+3,quan-3,hpc-c-4-3
+2,ibm-4,hpc-a-3-4
+1,quan-5,hpc-c-2-5
