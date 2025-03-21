@@ -6,8 +6,8 @@ from setting import *
 class Job:
     def __init__(self, rscgroup: str, id: int, vid: int, type: int, nnodes: int, elapsed: int, priority: int, relapsed: int):
         self.rscgroup = rscgroup # qc-hpc-a-m-o, qc-hpc-b-m-o, qc-hpc-c-m-o, qc-hpc-ibm-a, qc-hpc-quan-a
-        self.id = id # hybrid id
-        self.vid = vid # for display, cannot identify qc job or not
+        self.id = id # job id
+        self.vid = vid # subjob id
         self.type = type # "QC" == 0 or "HPC" == 1
         self.nnodes = nnodes # number of HPC nodes
         self.elapsed = elapsed # expected elasped time
@@ -16,6 +16,7 @@ class Job:
         self.wait = 0 # add 1 until running starts
         self.status = 'ACCEPT'
         self.timestamp = time.time()
+
         
     def __repr__(self):
         return f'Job(rscgroup={self.rscgroup}, id={self.id}, vid={self.vid}, type={self.type}, nnodes={self.nnodes}, elapsed={self.elapsed}, priority={self.priority}, relapsed={self.relapsed}, wait={self.wait}, status={self.status}, timestamp={self.timestamp})'
@@ -29,8 +30,13 @@ class Sched:
         self.joblist_unsorted = []
         self.joblist_sorted = []
 
+        self.id = 0
+        self.vid = 100000
+
+
     def sort_key_qc(self, subjoblist: list[Job]):
         return (subjoblist[0].type, subjoblist[0].priority, subjoblist[0].id)   
+    
 
     def run(self, subjoblist: list[Job]):
         for job in subjoblist:
@@ -43,29 +49,29 @@ class Sched:
                 server_hpc = Pyro5.client.Proxy(URI_HPC)
                 server_hpc.run(job.vid, job.relapsed)  
 
+
     def hold(self, subjoblist: list[Job]):
         for job in subjoblist:     
-            job.status = 'HOLD'     
+            job.status = 'HOLD'    
+
 
     @Pyro5.server.expose
-    @Pyro5.server.oneway
-    def submit_joblist(self, filename: str):
-        id = 0
-        vid = 100000
+    def submit_joblist(self, filename: str) -> str:
+        msg = []
+
         with open(filename, 'r') as f: # pd.read_csv(filename, comment='#', header=None) cannot read data with different columns in different lines
             lines = f.readlines()
-            for line in lines:
+            for line in lines: # 2,ibm-4,hpc-a-3-4
                 row = line.split(',')
-                priority = int(row[0])
-                id += 1
                 subjoblist = []
-                type = 0
-                nnodes = 1
+
+                self.id += 1
+                priority = int(row[0])
+                type = 0 # qc
                 for i in range(1, len(row)):
+                    self.vid += 1
                     if i == 1 and 'hpc-' in row[i]:
-                        type = 1
-                    vid += 1
-                    rscgroup = ''
+                        type = 1 # hpc
                     if 'hpc-a-' in row[i]:
                         rscgroup = 'qc-hpc-a-m-o'
                         nnodes = int(row[i].split('-')[-2])
@@ -77,17 +83,25 @@ class Sched:
                         nnodes = int(row[i].split('-')[-2])
                     elif 'ibm-' in row[i]:
                         rscgroup = 'qc-hpc-ibm-a'
+                        nnodes = 1
                     elif 'quan-' in row[i]:
                         rscgroup = 'qc-hpc-quan-a'
-                    
+                        nnodes = 1
                     elapsed = int(row[i].split('-')[-1])
-                    relapsed = elapsed
-                    subjoblist.append(Job(rscgroup=rscgroup, id=id, vid=vid, type=type, nnodes=nnodes, elapsed=elapsed, priority=priority, relapsed=relapsed))
+
+                    subjoblist.append(Job(rscgroup=rscgroup, id=self.id, vid=self.vid, type=type, nnodes=nnodes, elapsed=elapsed, priority=priority, relapsed=elapsed))
                 self.joblist_unsorted.append(subjoblist)
 
                 job_vids = [job.vid for job in subjoblist]
                 vids = ', '.join(map(str, job_vids))
-                print(f'The jobs were submitted: {vids}')
+                msg.append(f'The jobs were submitted: {vids}')
+
+        return '\n'.join(msg)
+    
+
+    @Pyro5.server.expose
+    @Pyro5.server.oneway
+    def sched_joblist(self):    
 
         self.joblist_sorted = self.joblist_unsorted.copy()
         self.joblist_sorted.sort(key=self.sort_key_qc)
@@ -96,7 +110,7 @@ class Sched:
             has_unfinished = False
             for subjoblist in self.joblist_sorted:
                 first_sub_job = subjoblist[0] # a qc sub job must be subjoblist[0]
-                if first_sub_job.status == 'ACCEPT' or first_sub_job.status == 'HOLD':
+                if first_sub_job.status in ['ACCEPT', 'HOLD']:
                     has_unfinished = True
                     if 'ibm-' in first_sub_job.rscgroup: 
                         if self.ibm_semaphor:
@@ -114,6 +128,7 @@ class Sched:
                         self.run(subjoblist)
             if not has_unfinished:
                 break
+
 
     @Pyro5.server.expose
     def finish(self, vid):    

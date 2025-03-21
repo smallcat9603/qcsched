@@ -13,7 +13,8 @@ def main():
 
     server_sched = Pyro5.client.Proxy(URI_SCHED)
 
-    server_sched.submit_joblist(filename)
+    print(server_sched.submit_joblist(filename))
+    server_sched.sched_joblist()
     
     for i in range(10):
         time.sleep(2)
