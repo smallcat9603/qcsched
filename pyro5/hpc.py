@@ -1,7 +1,8 @@
 import Pyro5.api
 import time
-import platform
 import threading
+from setting import *
+
 
 class HPC():
     def __init__(self, uri_sched: str):
@@ -20,21 +21,9 @@ class HPC():
         
     
 def main():
-    uname = platform.uname()
-    print(uname)
-    system = uname[0]
-    node = uname[1]
-    release = uname[2]
 
-    host_sched = '192.168.3.13' if 'raspberrypi' in node else 'localhost'
-    port_sched = 9093
-    uri_sched = f"PYRO:sched@{host_sched}:{port_sched}"
-
-    host = '192.168.3.69' if 'raspberrypi' in node else None
-    port = 9091
-
-    daemon = Pyro5.api.Daemon(host=host, port=port)
-    hpc = HPC(uri_sched)
+    daemon = Pyro5.api.Daemon(host=HOST_HPC, port=PORT_HPC)
+    hpc = HPC(URI_SCHED)
     uri = daemon.register(hpc, objectId="hpc")
     print("HPC running ...")
     daemon.requestLoop()

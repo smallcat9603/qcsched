@@ -1,6 +1,6 @@
 import Pyro5.api
-import platform
 import time
+from setting import *
 
 
 class Job:
@@ -146,24 +146,8 @@ class Sched:
 
 def main():   
 
-    uname = platform.uname()
-    system = uname[0]
-    node = uname[1]
-    release = uname[2]   
-
-    host_hpc = '192.168.3.69' if 'raspberrypi' in node else 'localhost'
-    host_qc = '192.168.3.80' if 'raspberrypi' in node else 'localhost'
-    port_hpc = 9091
-    port_qc = 9092
-
-    uri_qc = f"PYRO:qc@{host_qc}:{port_qc}"
-    uri_hpc = f"PYRO:hpc@{host_hpc}:{port_hpc}"  
-
-    host = '192.168.3.13' if 'raspberrypi' in node else None
-    port = 9093  
-
-    daemon = Pyro5.api.Daemon(host=host, port=port)
-    sched = Sched(uri_qc, uri_hpc)
+    daemon = Pyro5.api.Daemon(host=HOST_SCHED, port=PORT_SCHED)
+    sched = Sched(URI_QC, URI_HPC)
     uri = daemon.register(sched, objectId="sched")
     print("Scheduler running ...")
     daemon.requestLoop()

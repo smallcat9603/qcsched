@@ -1,7 +1,8 @@
 import Pyro5.api
 import time
-import platform
 import threading
+from setting import *
+
 
 class QC():
     def __init__(self, uri_sched: str):
@@ -20,21 +21,9 @@ class QC():
         
 
 def main():
-    uname = platform.uname()
-    print(uname)
-    system = uname[0]
-    node = uname[1]
-    release = uname[2]
 
-    host_sched = '192.168.3.13' if 'raspberrypi' in node else 'localhost'
-    port_sched = 9093
-    uri_sched = f"PYRO:sched@{host_sched}:{port_sched}"
-
-    host = '192.168.3.80' if 'raspberrypi' in node else None
-    port = 9092
-
-    daemon = Pyro5.api.Daemon(host=host, port=port)
-    qc = QC(uri_sched)
+    daemon = Pyro5.api.Daemon(host=HOST_QC, port=PORT_QC)
+    qc = QC(URI_SCHED)
     uri = daemon.register(qc, objectId="qc")
     print("QC running ...")
     daemon.requestLoop()
