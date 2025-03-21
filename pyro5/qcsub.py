@@ -15,11 +15,6 @@ def main():
 
     print(server_sched.submit_joblist(filename))
     server_sched.sched_joblist()
-    
-    for i in range(10):
-        time.sleep(2)
-        print(server_sched.stat_job_status())
-        print(server_sched.stat_qc_semaphor())
 
 
 if __name__ == "__main__":
