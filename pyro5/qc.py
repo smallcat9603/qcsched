@@ -5,12 +5,12 @@ from setting import *
 
 
 class QC():
-    def __init__(self, uri_sched: str):
-        self.uri_sched = uri_sched
+    def __init__(self, name: str):
+        self.name = name
 
     def run_threaded(self, vid: int, t: int):
         time.sleep(t)
-        server_sched = Pyro5.client.Proxy(self.uri_sched)
+        server_sched = Pyro5.client.Proxy(URI_SCHED)
         server_sched.finish(vid)
 
     @Pyro5.server.expose
@@ -23,10 +23,12 @@ class QC():
 def main():
 
     daemon = Pyro5.api.Daemon(host=HOST_QC, port=PORT_QC)
-    qc = QC(URI_SCHED)
-    uri = daemon.register(qc, objectId="qc")
+    name = 'qc'
+    qc = QC(name)
+    daemon.register(qc, objectId=name)
     print("QC running ...")
     daemon.requestLoop()
+
 
 if __name__ == "__main__":
     main()

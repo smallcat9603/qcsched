@@ -22,10 +22,7 @@ class Job:
     
 
 class Sched:
-    def __init__(self, uri_qc: str, uri_hpc: str):
-        self.uri_qc = uri_qc
-        self.uri_hpc = uri_hpc
-
+    def __init__(self):
         self.ibm_semaphor = 1
         self.quan_semaphor = 1
 
@@ -40,10 +37,10 @@ class Sched:
             job.status = 'RUNNING'
             
             if 'ibm-' in job.rscgroup or 'quan-' in job.rscgroup:
-                server_qc = Pyro5.client.Proxy(self.uri_qc)
+                server_qc = Pyro5.client.Proxy(URI_QC)
                 server_qc.run(job.vid, job.relapsed)
             else:
-                server_hpc = Pyro5.client.Proxy(self.uri_hpc)
+                server_hpc = Pyro5.client.Proxy(URI_HPC)
                 server_hpc.run(job.vid, job.relapsed)  
 
     def hold(self, subjoblist: list[Job]):
@@ -147,10 +144,11 @@ class Sched:
 def main():   
 
     daemon = Pyro5.api.Daemon(host=HOST_SCHED, port=PORT_SCHED)
-    sched = Sched(URI_QC, URI_HPC)
-    uri = daemon.register(sched, objectId="sched")
+    sched = Sched()
+    daemon.register(sched, objectId="sched")
     print("Scheduler running ...")
     daemon.requestLoop()
+
 
 if __name__ == "__main__":
     main()

@@ -20,5 +20,6 @@ def main():
         print(server_sched.stat_job_status())
         print(server_sched.stat_qc_semaphor())
 
+
 if __name__ == "__main__":
     main()

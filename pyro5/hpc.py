@@ -5,12 +5,12 @@ from setting import *
 
 
 class HPC():
-    def __init__(self, uri_sched: str):
-        self.uri_sched = uri_sched
+    def __init__(self, name: str):
+        self.name = name
 
     def run_threaded(self, vid: int, t: int):
         time.sleep(t)
-        server_sched = Pyro5.client.Proxy(self.uri_sched)
+        server_sched = Pyro5.client.Proxy(URI_SCHED)
         server_sched.finish(vid)
 
     @Pyro5.server.expose
@@ -23,10 +23,12 @@ class HPC():
 def main():
 
     daemon = Pyro5.api.Daemon(host=HOST_HPC, port=PORT_HPC)
-    hpc = HPC(URI_SCHED)
-    uri = daemon.register(hpc, objectId="hpc")
+    name = 'hpc'
+    hpc = HPC(name)
+    daemon.register(hpc, objectId=name)
     print("HPC running ...")
     daemon.requestLoop()
+
 
 if __name__ == "__main__":
     main()
