@@ -28,8 +28,7 @@ class Sched:
         self.ibm_semaphor = 1
         self.quan_semaphor = 1
 
-        self.joblist_unsorted = []
-        self.joblist_sorted = []
+        self.joblist = [] # list[subjoblist]
 
         self.id = 0
         self.vid = 100000
@@ -59,7 +58,7 @@ class Sched:
     @Pyro5.server.expose
     def submit_joblist(self, filename: str) -> str:
         '''
-        put into joblist_unsorted
+        put into joblist
         '''
         msg = []
 
@@ -94,7 +93,7 @@ class Sched:
                     elapsed = int(row[i].split('-')[-1])
 
                     subjoblist.append(Job(rscgroup=rscgroup, id=self.id, vid=self.vid, type=type, nnodes=nnodes, elapsed=elapsed, priority=priority, relapsed=elapsed))
-                self.joblist_unsorted.append(subjoblist)
+                self.joblist.append(subjoblist)
 
                 job_vids = [job.vid for job in subjoblist]
                 vids = ', '.join(map(str, job_vids))
@@ -112,10 +111,9 @@ class Sched:
         while True:
             time.sleep(SCHED_INTERVAL)
 
-            self.joblist_sorted = self.joblist_unsorted.copy()
-            self.joblist_sorted.sort(key=self.sort_key_qc)
+            self.joblist.sort(key=self.sort_key_qc)
 
-            for subjoblist in self.joblist_sorted:
+            for subjoblist in self.joblist:
                 first_sub_job = subjoblist[0] # a qc sub job must be subjoblist[0]
                 if first_sub_job.status in ['ACCEPT', 'HOLD']:
                     if 'ibm-' in first_sub_job.rscgroup: 
@@ -135,21 +133,27 @@ class Sched:
 
 
     @Pyro5.server.expose
-    def finish(self, vid):    
-        for subjoblist in self.joblist_sorted:
+    def finish(self, vid): 
+        found = False
+        for subjoblist in self.joblist:
             for job in subjoblist:
                 if vid == job.vid:
+                    found = True
                     job.status = 'FINISH'
                     if 'ibm-' in job.rscgroup:
                         self.ibm_semaphor = 1
                     elif 'quan-' in job.rscgroup:
                         self.quan_semaphor = 1
-
+                    break
+            if found:
+                break
+        
 
     @Pyro5.server.expose
     def stat_job_status(self):   
         job_status = {}
-        for subjoblist in self.joblist_unsorted:
+        joblist_ = sorted(self.joblist, key=lambda subjoblist: subjoblist[0].id)
+        for subjoblist in joblist_:
             for job in subjoblist:
                 job_status[job.vid] = job.status
         return job_status   
