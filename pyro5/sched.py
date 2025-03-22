@@ -160,7 +160,7 @@ def main():
 
     daemon = Pyro5.api.Daemon(host=HOST_SCHED, port=PORT_SCHED)
     sched = Sched()
-    daemon.register(sched, objectId="sched")
+    daemon.register(sched, objectId=NAME_SCHED)
     print("Scheduler running ...")
     daemon.requestLoop()
 

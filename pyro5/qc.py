@@ -23,9 +23,8 @@ class QC():
 def main():
 
     daemon = Pyro5.api.Daemon(host=HOST_QC, port=PORT_QC)
-    name = 'qc'
-    qc = QC(name)
-    daemon.register(qc, objectId=name)
+    qc = QC(NAME_QC)
+    daemon.register(qc, objectId=NAME_QC)
     print("QC running ...")
     daemon.requestLoop()
 

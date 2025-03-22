@@ -1,6 +1,5 @@
 import Pyro5.api
 import sys
-import time
 from setting import *
 
 

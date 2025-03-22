@@ -23,9 +23,8 @@ class HPC():
 def main():
 
     daemon = Pyro5.api.Daemon(host=HOST_HPC, port=PORT_HPC)
-    name = 'hpc'
-    hpc = HPC(name)
-    daemon.register(hpc, objectId=name)
+    hpc = HPC(NAME_HPC)
+    daemon.register(hpc, objectId=NAME_HPC)
     print("HPC running ...")
     daemon.requestLoop()
 
