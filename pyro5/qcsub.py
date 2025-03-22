@@ -13,7 +13,6 @@ def main():
     server_sched = Pyro5.client.Proxy(URI_SCHED)
 
     print(server_sched.submit_joblist(filename))
-    server_sched.sched_joblist()
 
 
 if __name__ == "__main__":

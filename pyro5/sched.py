@@ -1,5 +1,6 @@
 import Pyro5.api
 import time
+import threading
 from setting import *
 
 
@@ -57,6 +58,9 @@ class Sched:
 
     @Pyro5.server.expose
     def submit_joblist(self, filename: str) -> str:
+        '''
+        put into joblist_unsorted
+        '''
         msg = []
 
         with open(filename, 'r') as f: # pd.read_csv(filename, comment='#', header=None) cannot read data with different columns in different lines
@@ -99,19 +103,21 @@ class Sched:
         return '\n'.join(msg)
     
 
-    @Pyro5.server.expose
-    @Pyro5.server.oneway
-    def sched_joblist(self):    
-
-        self.joblist_sorted = self.joblist_unsorted.copy()
-        self.joblist_sorted.sort(key=self.sort_key_qc)
-
+    def sched_joblist(self):
+        '''
+        accept -> running
+        accept -> hold
+        hold -> running
+        '''
         while True:
-            has_unfinished = False
+            time.sleep(SCHED_INTERVAL)
+
+            self.joblist_sorted = self.joblist_unsorted.copy()
+            self.joblist_sorted.sort(key=self.sort_key_qc)
+
             for subjoblist in self.joblist_sorted:
                 first_sub_job = subjoblist[0] # a qc sub job must be subjoblist[0]
                 if first_sub_job.status in ['ACCEPT', 'HOLD']:
-                    has_unfinished = True
                     if 'ibm-' in first_sub_job.rscgroup: 
                         if self.ibm_semaphor:
                             self.run(subjoblist)
@@ -126,8 +132,6 @@ class Sched:
                             self.hold(subjoblist)
                     else:
                         self.run(subjoblist)
-            if not has_unfinished:
-                break
 
 
     @Pyro5.server.expose
@@ -160,6 +164,10 @@ def main():
 
     daemon = Pyro5.api.Daemon(host=HOST_SCHED, port=PORT_SCHED)
     sched = Sched()
+
+    thread = threading.Thread(target=sched.sched_joblist)
+    thread.start()
+
     daemon.register(sched, objectId=NAME_SCHED)
     print("Scheduler running ...")
     daemon.requestLoop()
