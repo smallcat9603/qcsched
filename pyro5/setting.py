@@ -27,3 +27,11 @@ URI_QC = f"PYRO:{NAME_QC}@{HOST_QC}:{PORT_QC}"
 URI_SCHED = f"PYRO:{NAME_SCHED}@{HOST_SCHED}:{PORT_SCHED}"
 
 SCHED_INTERVAL = 10
+
+RSCGROUP_HPC_A = 'qc-hpc-a-m-o'
+RSCGROUP_HPC_B = 'qc-hpc-b-m-o'
+RSCGROUP_HPC_C = 'qc-hpc-c-m-o'
+RSCGROUP_QC_IBM = 'qc-hpc-ibm-a'
+RSCGROUP_QC_QUAN = 'qc-hpc-quan-a'
+
+DATE_FORMAT = '%m/%d %H:%M:%S'

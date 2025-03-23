@@ -46,9 +46,9 @@ class Sched:
         for job in subjoblist:
             job.status = 'RUNNING'
             job.wait = int(time.time() - job.timestamp)
-            job.starttime = datetime.now().strftime('%m/%d %H:%M:%S')
+            job.starttime = datetime.now().strftime(DATE_FORMAT)
             
-            if job.rscgroup in ['qc-hpc-ibm-a', 'qc-hpc-quan-a']:
+            if job.rscgroup in [RSCGROUP_QC_IBM, RSCGROUP_QC_QUAN]:
                 server_qc = Pyro5.client.Proxy(URI_QC)
                 server_qc.run(job.vid, job.relapsed)
             else:
@@ -59,6 +59,14 @@ class Sched:
     def hold(self, subjoblist: list[Job]):
         for job in subjoblist:     
             job.status = 'HOLD'    
+
+
+    def get_nnodes(self, name):
+        return int(name.removesuffix(".sh").split('-')[-2])
+    
+
+    def get_elapsed(self, name):
+        return int(name.removesuffix(".sh").split('-')[-1])
 
 
     @Pyro5.server.expose
@@ -80,24 +88,24 @@ class Sched:
                 for i in range(1, len(row)):
                     name = row[i].strip() # remove \n
                     self.vid += 1
-                    if i == 1 and 'hpc-' in row[i]:
+                    if i == 1 and 'hpc-' in name:
                         type = 1 # hpc
-                    if 'hpc-a-' in row[i]:
-                        rscgroup = 'qc-hpc-a-m-o'
-                        nnodes = int(row[i].split('-')[-2])
-                    elif 'hpc-b-' in row[i]:
-                        rscgroup = 'qc-hpc-b-m-o'
-                        nnodes = int(row[i].split('-')[-2])
-                    elif 'hpc-c-' in row[i]:
-                        rscgroup = 'qc-hpc-c-m-o'
-                        nnodes = int(row[i].split('-')[-2])
-                    elif 'qc-ibm-' in row[i]:
-                        rscgroup = 'qc-hpc-ibm-a'
+                    if 'hpc-a-' in name:
+                        rscgroup = RSCGROUP_HPC_A
+                        nnodes = self.get_nnodes(name)
+                    elif 'hpc-b-' in name:
+                        rscgroup = RSCGROUP_HPC_B
+                        nnodes = self.get_nnodes(name)
+                    elif 'hpc-c-' in name:
+                        rscgroup = RSCGROUP_HPC_C
+                        nnodes = self.get_nnodes(name)
+                    elif 'qc-ibm-' in name:
+                        rscgroup = RSCGROUP_QC_IBM
                         nnodes = 1
-                    elif 'qc-quan-' in row[i]:
-                        rscgroup = 'qc-hpc-quan-a'
+                    elif 'qc-quan-' in name:
+                        rscgroup = RSCGROUP_QC_QUAN
                         nnodes = 1
-                    elapsed = int(row[i].split('-')[-1])
+                    elapsed = self.get_elapsed(name)
 
                     subjoblist.append(Job(name=name, rscgroup=rscgroup, id=self.id, vid=self.vid, type=type, nnodes=nnodes, elapsed=elapsed, priority=priority, relapsed=elapsed))
                 self.joblist.append(subjoblist)
@@ -123,13 +131,13 @@ class Sched:
             for subjoblist in self.joblist:
                 first_sub_job = subjoblist[0] # a qc sub job must be subjoblist[0]
                 if first_sub_job.status in ['ACCEPT', 'HOLD']:
-                    if first_sub_job.rscgroup == 'qc-hpc-ibm-a': 
+                    if first_sub_job.rscgroup == RSCGROUP_QC_IBM: 
                         if self.ibm_semaphor:
                             self.run(subjoblist)
                             self.ibm_semaphor = 0
                         else:
                             self.hold(subjoblist)
-                    elif first_sub_job.rscgroup == 'qc-hpc-quan-a':
+                    elif first_sub_job.rscgroup == RSCGROUP_QC_QUAN:
                         if self.quan_semaphor:
                             self.run(subjoblist)
                             self.quan_semaphor = 0
@@ -147,10 +155,10 @@ class Sched:
                 if vid == job.vid:
                     found = True
                     job.status = 'FINISH'
-                    job.endtime = datetime.now().strftime('%m/%d %H:%M:%S')
-                    if job.rscgroup == 'qc-hpc-ibm-a':
+                    job.endtime = datetime.now().strftime(DATE_FORMAT)
+                    if job.rscgroup == RSCGROUP_QC_IBM:
                         self.ibm_semaphor = 1
-                    elif job.rscgroup == 'qc-hpc-quan-a':
+                    elif job.rscgroup == RSCGROUP_QC_QUAN:
                         self.quan_semaphor = 1
                     break
             if found:
@@ -167,19 +175,19 @@ class Sched:
                 token = f'({job.elapsed:.1f})'
                 if job.status in ['RUNNING', 'FINISH']:
                     curtime = datetime.now()
-                    starttime = datetime.strptime(job.starttime, "%m/%d %H:%M:%S").replace(year=curtime.year)
+                    starttime = datetime.strptime(job.starttime, DATE_FORMAT).replace(year=curtime.year)
                     difftime = curtime - starttime
                     if job.status == 'FINISH':
-                        endtime = datetime.strptime(job.endtime, "%m/%d %H:%M:%S").replace(year=curtime.year)
+                        endtime = datetime.strptime(job.endtime, DATE_FORMAT).replace(year=curtime.year)
                         difftime = endtime - starttime
                     hours, remainder = divmod(difftime.seconds, 3600)
                     minutes, seconds = divmod(remainder, 60)
                     elapse = f'{hours:02}:{minutes:02}:{seconds:02}'
                     token = f'{hours*3600+minutes*60+seconds:.1f}'
-                if job.rscgroup in ['qc-hpc-ibm-a', 'qc-hpc-quan-a']:
-                    job_status[job.vid] = [job.name, job.status, 'gz00', job.rscgroup, job.starttime, elapse, token, '-', str(job.nnodes)]
+                if job.rscgroup in [RSCGROUP_QC_IBM, RSCGROUP_QC_QUAN]:
+                    job_status[job.vid] = [job.id, job.name, job.status, 'gz00', job.rscgroup, job.starttime, elapse, token, '-', str(job.nnodes)]
                 else:
-                    job_status[job.vid] = [job.name, job.status, 'gz00', job.rscgroup, job.starttime, elapse, token, str(job.nnodes), '-']
+                    job_status[job.vid] = [job.id, job.name, job.status, 'gz00', job.rscgroup, job.starttime, elapse, token, str(job.nnodes), '-']
         return job_status   
 
 
@@ -194,6 +202,7 @@ def main():
     sched = Sched()
 
     thread = threading.Thread(target=sched.sched_joblist)
+    thread.daemon = True # exits too if main thread exits
     thread.start()
 
     daemon.register(sched, objectId=NAME_SCHED)
