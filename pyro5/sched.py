@@ -164,6 +164,40 @@ class Sched:
                         return f'Subjob {vid} not found.'
 
         return '\n'.join(msg)
+    
+
+    @Pyro5.server.expose
+    def del_subjobs(self, vids: list[str]) -> str:
+        '''
+        delete subjobs
+        '''
+        msg = []
+
+        for vid in vids:
+            found = False
+            for subjoblist in self.joblist:
+                for subjob in subjoblist:
+                    if subjob.vid == int(vid):
+                        if subjob.status == 'HOLD':
+                            for subjob_ in subjoblist:
+                                subjob_.status = 'DELETE'
+                            msg.append(f'The following qcsubjob has been deleted: {vid}')
+
+                            found = True
+                            break
+                        elif subjob.status == 'DELETE':
+                            msg.append(f'The following qcsubjob has been deleted: {vid}')
+
+                            found = True
+                            break
+                        else:
+                            msg.append(f'{subjob.status} job cannot be deleted.')
+                if found:
+                    break
+            if not found:
+                msg.append(f'Subjob {vid} not found.')
+
+        return '\n'.join(msg)
 
 
     def sched_joblist(self):
@@ -201,7 +235,7 @@ class Sched:
             for job in subjoblist:
                 if vid == job.vid:
                     found = True
-                    job.status = 'FINISH'
+                    job.status = 'END'
                     job.endtime = datetime.now().strftime(DATE_FORMAT)
                     if job.rscgroup == RSCGROUP_QC_IBM:
                         self.ibm_semaphor = 1
@@ -220,11 +254,11 @@ class Sched:
             for job in subjoblist:
                 elapse = '00:00:00'
                 token = f'({job.elapsed:.1f})'
-                if job.status in ['RUNNING', 'FINISH']:
+                if job.status in ['RUNNING', 'END']:
                     curtime = datetime.now()
                     starttime = datetime.strptime(job.starttime, DATE_FORMAT).replace(year=curtime.year)
                     difftime = curtime - starttime
-                    if job.status == 'FINISH':
+                    if job.status == 'END':
                         endtime = datetime.strptime(job.endtime, DATE_FORMAT).replace(year=curtime.year)
                         difftime = endtime - starttime
                     hours, remainder = divmod(difftime.seconds, 3600)

@@ -1,19 +1,24 @@
 import Pyro5.api
-import sys
+import argparse
 from setting import *
 
 
 def main():
-    if len(sys.argv) != 1:
-        print("Usage: python pjstat.py")
-        sys.exit(1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-H', action='store_true', help='historical job status')
+    args = parser.parse_args()
+
+    if args.H:
+        list_status = ['DELETE', 'END']
+    else:
+        list_status = ['HOLD', 'RUNNING']
 
     server_sched = Pyro5.client.Proxy(URI_SCHED)
 
     stat = []
     job_status = server_sched.stat_job_status()
     for key, values in job_status.items():
-        if values[2] != 'FINISH':
+        if values[2] in list_status:
             status = '\t'.join(values[1:])
             stat.append(f'{key}({values[0]})\t{status}') 
     
