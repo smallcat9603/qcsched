@@ -1,18 +1,21 @@
 import Pyro5.api
-import sys
+import argparse
 from setting import *
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python qcsub.py <filename>")
-        sys.exit(1)
 
-    filename = sys.argv[1]  
+    parser = argparse.ArgumentParser()
+    parser.add_argument('file', help='job list file')
+    parser.add_argument('-add', type=int, help='added job vid')
+    args = parser.parse_args()
 
     server_sched = Pyro5.client.Proxy(URI_SCHED)
 
-    print(server_sched.submit_joblist(filename))
+    if args.add:
+        print(server_sched.add_subjob(args.add, args.file))
+    else:
+        print(server_sched.submit_joblist(args.file))
 
 
 if __name__ == "__main__":

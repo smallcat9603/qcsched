@@ -17,7 +17,7 @@ class Job:
         self.priority = priority # 1 for highest priority
         self.relapsed = relapsed # real elapsed time
         self.wait = 0
-        self.status = 'ACCEPT'
+        self.status = 'HOLD'
         self.timestamp = time.time()
         self.starttime = '--/-- --:--:--'
         self.endtime = '--/-- --:--:--'
@@ -112,15 +112,62 @@ class Sched:
 
                 job_vids = [job.vid for job in subjoblist]
                 vids = ', '.join(map(str, job_vids))
-                msg.append(f'The jobs were submitted: {vids}')
+                msg.append(f'The following qcsubjobs were submitted: {vids}')
 
         return '\n'.join(msg)
     
 
+    @Pyro5.server.expose
+    def add_subjob(self, vid: int, filename: str) -> str:
+        '''
+        add subjob to existing joblist
+        '''
+        msg = []
+
+        with open(filename, 'r') as f: # pd.read_csv(filename, comment='#', header=None) cannot read data with different columns in different lines
+            lines = f.readlines()
+            for line in lines: # 2,hpc-a-3-4
+                row = line.split(',')
+
+                for i in range(1, len(row)):
+                    name = row[i].strip() # remove \n
+                    self.vid += 1
+                    if i == 1 and 'qc-' in name:
+                        return 'QC jobs cannot be added.'
+                    if 'hpc-a-' in name:
+                        rscgroup = RSCGROUP_HPC_A
+                        nnodes = self.get_nnodes(name)
+                    elif 'hpc-b-' in name:
+                        rscgroup = RSCGROUP_HPC_B
+                        nnodes = self.get_nnodes(name)
+                    elif 'hpc-c-' in name:
+                        rscgroup = RSCGROUP_HPC_C
+                        nnodes = self.get_nnodes(name)
+                    elapsed = self.get_elapsed(name)
+
+                    found = False
+                    for subjoblist in self.joblist:
+                        for subjob in subjoblist:
+                            if subjob.vid == vid:   
+                                if subjob.status == 'HOLD':
+                                    subjoblist.append(Job(name=name, rscgroup=rscgroup, id=subjob.id, vid=self.vid, type=1, nnodes=nnodes, elapsed=elapsed, priority=subjob.priority, relapsed=elapsed))
+                                    msg.append(f'The following qcsubjob has been added: {self.vid}')
+                                    
+                                    found = True
+                                    break
+                                else:
+                                    return f'Subjob cannot be added to {subjob.status} job.'      
+                        if found:
+                            break
+
+                    if not found:
+                        return f'Subjob {vid} not found.'
+
+        return '\n'.join(msg)
+
+
     def sched_joblist(self):
         '''
-        accept -> running
-        accept -> hold
         hold -> running
         '''
         while True:
@@ -130,7 +177,7 @@ class Sched:
 
             for subjoblist in self.joblist:
                 first_sub_job = subjoblist[0] # a qc sub job must be subjoblist[0]
-                if first_sub_job.status in ['ACCEPT', 'HOLD']:
+                if first_sub_job.status == 'HOLD':
                     if first_sub_job.rscgroup == RSCGROUP_QC_IBM: 
                         if self.ibm_semaphor:
                             self.run(subjoblist)
