@@ -7,18 +7,37 @@ from setting import *
 class HPC():
     def __init__(self, name: str):
         self.name = name
+        self.events = {}
 
-    def run_threaded(self, vid: int, t: int):
-        time.sleep(t)
+
+    def run_threaded(self, vid: int, t: int, event):
+        for i in range(t):
+            time.sleep(1)
+            event.wait()
         server_sched = Pyro5.client.Proxy(URI_SCHED)
         server_sched.finish(vid)
 
+
     @Pyro5.server.expose
     @Pyro5.server.oneway
-    def run(self, vid: int, t: int):
-        thread = threading.Thread(target=self.run_threaded, args=[vid, t])
+    def run(self, vid: int, t: int):  
+        self.events[vid] = threading.Event()      
+        thread = threading.Thread(target=self.run_threaded, args=[vid, t, self.events[vid]])
         thread.start()
-        
+        self.events[vid].set()
+
+
+    @Pyro5.server.expose
+    @Pyro5.server.oneway
+    def pause(self, vid: int):
+        self.events[vid].clear()
+
+
+    @Pyro5.server.expose
+    @Pyro5.server.oneway
+    def resume(self, vid: int):
+        self.events[vid].set()
+
     
 def main():
 

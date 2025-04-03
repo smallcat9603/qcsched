@@ -8,10 +8,12 @@ class QC():
     def __init__(self, name: str):
         self.name = name
 
+
     def run_threaded(self, vid: int, t: int):
         time.sleep(t)
         server_sched = Pyro5.client.Proxy(URI_SCHED)
         server_sched.finish(vid)
+
 
     @Pyro5.server.expose
     @Pyro5.server.oneway

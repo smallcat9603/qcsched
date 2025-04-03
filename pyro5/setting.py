@@ -34,4 +34,6 @@ RSCGROUP_HPC_C = 'qc-hpc-c-m-o'
 RSCGROUP_QC_IBM = 'qc-hpc-ibm-a'
 RSCGROUP_QC_QUAN = 'qc-hpc-quan-a'
 
+PROJECT = 'gz00'
+
 DATE_FORMAT = '%m/%d %H:%M:%S'

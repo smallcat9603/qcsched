@@ -1,0 +1,4 @@
+1,qc-ibm-10.sh,hpc-b-4-10.sh
+3,qc-quan-10.sh,hpc-b-4-10.sh
+2,qc-ibm-10.sh,hpc-b-3-10.sh
+1,qc-quan-10.sh,hpc-b-2-10.sh

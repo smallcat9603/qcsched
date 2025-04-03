@@ -11,7 +11,7 @@ def main():
     if args.H:
         list_status = ['DELETE', 'END']
     else:
-        list_status = ['HOLD', 'RUNNING']
+        list_status = ['HOLD', 'RUNNING', 'PAUSE']
 
     server_sched = Pyro5.client.Proxy(URI_SCHED)
 
@@ -28,7 +28,7 @@ def main():
     else:
         print('No jobs were submitted.')
 
-    # print(server_sched.stat_qc_semaphor())
+    # print(server_sched.stat_nnodes())
 
 
 if __name__ == "__main__":

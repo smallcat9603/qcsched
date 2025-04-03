@@ -29,8 +29,14 @@ class Job:
 
 class Sched:
     def __init__(self):
-        self.ibm_semaphor = 1
-        self.quan_semaphor = 1
+        self.nnodes = {}
+
+        self.nnodes[RSCGROUP_QC_IBM] = 1
+        self.nnodes[RSCGROUP_QC_QUAN] = 1
+
+        self.nnodes[RSCGROUP_HPC_A] = 64
+        self.nnodes[RSCGROUP_HPC_B] = 64
+        self.nnodes[RSCGROUP_HPC_C] = 64
 
         self.joblist = [] # list[subjoblist]
 
@@ -45,20 +51,58 @@ class Sched:
     def run(self, subjoblist: list[Job]):
         for job in subjoblist:
             job.status = 'RUNNING'
+
             job.wait = int(time.time() - job.timestamp)
             job.starttime = datetime.now().strftime(DATE_FORMAT)
             
             if job.rscgroup in [RSCGROUP_QC_IBM, RSCGROUP_QC_QUAN]:
+                self.nnodes[job.rscgroup] = 0
+
                 server_qc = Pyro5.client.Proxy(URI_QC)
                 server_qc.run(job.vid, job.relapsed)
             else:
+                self.nnodes[job.rscgroup] -= job.nnodes
+                if self.nnodes[job.rscgroup] < 0:
+                    self.pause(job.rscgroup)
+
                 server_hpc = Pyro5.client.Proxy(URI_HPC)
                 server_hpc.run(job.vid, job.relapsed)  
+
+
+    def pause(self, rscgroup: str):
+
+        for subjoblist in self.joblist:
+            candidate = False
+            for job in subjoblist: 
+                if job.type == 1 and job.status == 'RUNNING' and job.rscgroup == rscgroup:
+                    candidate = True
+                    break
+            if candidate:
+                for job in subjoblist:
+                    job.status = 'PAUSE'
+                    
+                    server_hpc = Pyro5.client.Proxy(URI_HPC)
+                    server_hpc.pause(job.vid)
+
+                    self.nnodes[job.rscgroup] += job.nnodes
+
+            if self.nnodes[rscgroup] >= 0:
+                break 
 
 
     def hold(self, subjoblist: list[Job]):
         for job in subjoblist:     
             job.status = 'HOLD'    
+
+
+    def resume(self, subjoblist: list[Job]):
+        for job in subjoblist:
+            job.status = 'RUNNING'
+
+            self.nnodes[job.rscgroup] -= job.nnodes
+
+            server_hpc = Pyro5.client.Proxy(URI_HPC)
+            server_hpc.resume(job.vid)
 
 
     def get_nnodes(self, name):
@@ -198,7 +242,14 @@ class Sched:
                 msg.append(f'Subjob {vid} not found.')
 
         return '\n'.join(msg)
+    
 
+    def hpc_nodes_enough(self, subjoblist: list[Job]) -> bool:
+        for job in subjoblist:
+            if self.nnodes[job.rscgroup] < job.nnodes:
+                return False
+        return True
+    
 
     def sched_joblist(self):
         '''
@@ -212,20 +263,15 @@ class Sched:
             for subjoblist in self.joblist:
                 first_sub_job = subjoblist[0] # a qc sub job must be subjoblist[0]
                 if first_sub_job.status == 'HOLD':
-                    if first_sub_job.rscgroup == RSCGROUP_QC_IBM: 
-                        if self.ibm_semaphor:
+                    if first_sub_job.type == 0:
+                        if self.nnodes[first_sub_job.rscgroup]:
                             self.run(subjoblist)
-                            self.ibm_semaphor = 0
-                        else:
-                            self.hold(subjoblist)
-                    elif first_sub_job.rscgroup == RSCGROUP_QC_QUAN:
-                        if self.quan_semaphor:
-                            self.run(subjoblist)
-                            self.quan_semaphor = 0
-                        else:
-                            self.hold(subjoblist)
                     else:
-                        self.run(subjoblist)
+                        if self.hpc_nodes_enough(subjoblist):
+                            self.run(subjoblist)
+                elif first_sub_job.status == 'PAUSE':
+                    if self.hpc_nodes_enough(subjoblist):
+                        self.resume(subjoblist)
 
 
     @Pyro5.server.expose
@@ -237,10 +283,10 @@ class Sched:
                     found = True
                     job.status = 'END'
                     job.endtime = datetime.now().strftime(DATE_FORMAT)
-                    if job.rscgroup == RSCGROUP_QC_IBM:
-                        self.ibm_semaphor = 1
-                    elif job.rscgroup == RSCGROUP_QC_QUAN:
-                        self.quan_semaphor = 1
+                    if job.rscgroup in [RSCGROUP_QC_IBM, RSCGROUP_QC_QUAN]:
+                        self.nnodes[job.rscgroup] = 1
+                    else:
+                        self.nnodes[job.rscgroup] += job.nnodes
                     break
             if found:
                 break
@@ -266,15 +312,15 @@ class Sched:
                     elapse = f'{hours:02}:{minutes:02}:{seconds:02}'
                     token = f'{hours*3600+minutes*60+seconds:.1f}'
                 if job.rscgroup in [RSCGROUP_QC_IBM, RSCGROUP_QC_QUAN]:
-                    job_status[job.vid] = [job.id, job.name, job.status, 'gz00', job.rscgroup, job.starttime, elapse, token, '-', str(job.nnodes)]
+                    job_status[job.vid] = [job.id, job.name, job.status, PROJECT, job.rscgroup, job.starttime, elapse, token, '-', str(job.nnodes)]
                 else:
-                    job_status[job.vid] = [job.id, job.name, job.status, 'gz00', job.rscgroup, job.starttime, elapse, token, str(job.nnodes), '-']
+                    job_status[job.vid] = [job.id, job.name, job.status, PROJECT, job.rscgroup, job.starttime, elapse, token, str(job.nnodes), '-']
         return job_status   
 
 
     @Pyro5.server.expose
-    def stat_qc_semaphor(self):   
-        return f'ibm_semaphor: {self.ibm_semaphor}, quan_semaphor: {self.quan_semaphor}'     
+    def stat_nnodes(self):   
+        return f'ibm_semaphor: {self.nnodes[RSCGROUP_QC_IBM]}, quan_semaphor: {self.nnodes[RSCGROUP_QC_QUAN]}, hpc_a: {self.nnodes[RSCGROUP_HPC_A]}, hpc_b: {self.nnodes[RSCGROUP_HPC_B]}, hpc_c: {self.nnodes[RSCGROUP_HPC_C]}'     
 
 
 def main():   
